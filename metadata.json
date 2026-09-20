@@ -1,0 +1,6 @@
+{
+  "name": "AI Creative Studio",
+  "description": "Professional all-in-one AI Creative Studio with Video, Photo, and Audio editors, AI Quality Checker, Smart Media Intelligence, Auto Editing, Model Hub, and Version Snapshots.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

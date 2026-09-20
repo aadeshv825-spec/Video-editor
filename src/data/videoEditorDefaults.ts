@@ -1,0 +1,238 @@
+import {
+  TimelineTrack,
+  TimelineClip,
+  TransformProperties,
+  SpeedProperties,
+  ColorProperties,
+  AudioProperties,
+  TextProperties,
+} from '../types/videoEditor';
+
+export const DEFAULT_TRANSFORM: TransformProperties = {
+  positionX: 0,
+  positionY: 0,
+  scale: 100,
+  rotation: 0,
+  cropTop: 0,
+  cropBottom: 0,
+  cropLeft: 0,
+  cropRight: 0,
+  flipHorizontal: false,
+  flipVertical: false,
+  opacity: 100,
+};
+
+export const DEFAULT_SPEED: SpeedProperties = {
+  speed: 1.0,
+  reverse: false,
+  freezeFrame: false,
+  ramp: 'linear',
+};
+
+export const DEFAULT_COLOR: ColorProperties = {
+  exposure: 0,
+  brightness: 0,
+  contrast: 0,
+  saturation: 100,
+  temperature: 0,
+  tint: 0,
+  highlights: 0,
+  shadows: 0,
+  sharpen: 0,
+  blur: 0,
+};
+
+export const DEFAULT_AUDIO: AudioProperties = {
+  volume: 100,
+  muted: false,
+  fadeInSec: 0,
+  fadeOutSec: 0,
+};
+
+export const DEFAULT_TEXT: TextProperties = {
+  text: 'CINEMATIC TITLE',
+  fontFamily: 'system-ui, -apple-system, sans-serif',
+  fontSize: 48,
+  color: '#FFFFFF',
+  alignment: 'center',
+  opacity: 100,
+  animation: 'fade',
+};
+
+export const generateWaveform = (count: number = 40): number[] => {
+  const result: number[] = [];
+  for (let i = 0; i < count; i++) {
+    // Generate organic sounding audio wave heights
+    const base = Math.sin(i * 0.3) * 0.3 + 0.5;
+    const noise = Math.random() * 0.4;
+    result.push(Math.max(0.15, Math.min(1.0, base * 0.6 + noise)));
+  }
+  return result;
+};
+
+export const INITIAL_TRACKS: TimelineTrack[] = [
+  {
+    id: 'v2',
+    label: 'V2 (Overlay / B-Roll)',
+    type: 'video',
+    muted: false,
+    locked: false,
+    hidden: false,
+    volume: 1,
+  },
+  {
+    id: 'v1',
+    label: 'V1 (Primary Video)',
+    type: 'video',
+    muted: false,
+    locked: false,
+    hidden: false,
+    volume: 1,
+  },
+  {
+    id: 't1',
+    label: 'T1 (Titles & Text)',
+    type: 'text',
+    muted: false,
+    locked: false,
+    hidden: false,
+    volume: 1,
+  },
+  {
+    id: 'a1',
+    label: 'A1 (Dialogue / FX)',
+    type: 'audio',
+    muted: false,
+    locked: false,
+    hidden: false,
+    volume: 1,
+  },
+  {
+    id: 'a2',
+    label: 'A2 (Score / Ambience)',
+    type: 'audio',
+    muted: false,
+    locked: false,
+    hidden: false,
+    volume: 0.8,
+  },
+];
+
+export const INITIAL_CLIPS: TimelineClip[] = [
+  {
+    id: 'clip-v1-1',
+    trackId: 'v1',
+    type: 'video',
+    title: 'Cinematic_Urban_Dawn_4K.mp4',
+    url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1200&q=80',
+    startSec: 0,
+    durationSec: 5.5,
+    trimInSec: 0,
+    trimOutSec: 5.5,
+    colorBadge: 'bg-emerald-800/80 border-emerald-600/70 text-emerald-100',
+    transform: { ...DEFAULT_TRANSFORM },
+    keyframes: [],
+    speed: { ...DEFAULT_SPEED },
+    colorAdjustments: { ...DEFAULT_COLOR, contrast: 10, saturation: 110 },
+    audio: { ...DEFAULT_AUDIO },
+    transitionIn: { type: 'crossfade', durationSec: 0.5 },
+    waveformSamples: generateWaveform(36),
+  },
+  {
+    id: 'clip-v1-2',
+    trackId: 'v1',
+    type: 'video',
+    title: 'Model_Portrait_Studio_Light.mp4',
+    url: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=800&q=80',
+    startSec: 5.5,
+    durationSec: 6.0,
+    trimInSec: 0,
+    trimOutSec: 6.0,
+    colorBadge: 'bg-emerald-800/80 border-emerald-600/70 text-emerald-100',
+    transform: { ...DEFAULT_TRANSFORM },
+    keyframes: [],
+    speed: { ...DEFAULT_SPEED },
+    colorAdjustments: { ...DEFAULT_COLOR, exposure: 5, temperature: 15 },
+    audio: { ...DEFAULT_AUDIO },
+    waveformSamples: generateWaveform(40),
+  },
+  {
+    id: 'clip-v2-1',
+    trackId: 'v2',
+    type: 'image',
+    title: 'Anamorphic_Light_Streak.png',
+    url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80',
+    startSec: 2.0,
+    durationSec: 4.5,
+    trimInSec: 0,
+    trimOutSec: 4.5,
+    colorBadge: 'bg-sky-800/80 border-sky-600/70 text-sky-100',
+    transform: { ...DEFAULT_TRANSFORM, scale: 105, opacity: 85 },
+    keyframes: [],
+    speed: { ...DEFAULT_SPEED },
+    colorAdjustments: { ...DEFAULT_COLOR, brightness: 10 },
+    audio: { ...DEFAULT_AUDIO, muted: true },
+    transitionIn: { type: 'crossfade', durationSec: 0.8 },
+  },
+  {
+    id: 'clip-t1-1',
+    trackId: 't1',
+    type: 'text',
+    title: 'Opening Title Overlay',
+    startSec: 1.0,
+    durationSec: 4.0,
+    trimInSec: 0,
+    trimOutSec: 4.0,
+    colorBadge: 'bg-amber-800/80 border-amber-600/70 text-amber-100',
+    transform: { ...DEFAULT_TRANSFORM },
+    keyframes: [],
+    speed: { ...DEFAULT_SPEED },
+    colorAdjustments: { ...DEFAULT_COLOR },
+    text: {
+      text: 'CHRONICLES OF LIGHT',
+      fontFamily: 'Cinzel, Georgia, serif',
+      fontSize: 42,
+      color: '#FFFFFF',
+      alignment: 'center',
+      opacity: 100,
+      animation: 'fade',
+    },
+    audio: { ...DEFAULT_AUDIO, muted: true },
+    transitionIn: { type: 'crossfade', durationSec: 0.6 },
+    transitionOut: { type: 'crossfade', durationSec: 0.6 },
+  },
+  {
+    id: 'clip-a1-1',
+    trackId: 'a1',
+    type: 'audio',
+    title: 'Studio_Voiceover_Take02.wav',
+    startSec: 1.5,
+    durationSec: 8.0,
+    trimInSec: 0,
+    trimOutSec: 8.0,
+    colorBadge: 'bg-purple-800/80 border-purple-600/70 text-purple-100',
+    transform: { ...DEFAULT_TRANSFORM },
+    keyframes: [],
+    speed: { ...DEFAULT_SPEED },
+    colorAdjustments: { ...DEFAULT_COLOR },
+    audio: { ...DEFAULT_AUDIO, volume: 110, fadeInSec: 0.3, fadeOutSec: 0.5 },
+    waveformSamples: generateWaveform(60),
+  },
+  {
+    id: 'clip-a2-1',
+    trackId: 'a2',
+    type: 'audio',
+    title: 'Analog_Synth_Soundtrack_120BPM.wav',
+    startSec: 0,
+    durationSec: 14.0,
+    trimInSec: 0,
+    trimOutSec: 14.0,
+    colorBadge: 'bg-indigo-800/80 border-indigo-600/70 text-indigo-100',
+    transform: { ...DEFAULT_TRANSFORM },
+    keyframes: [],
+    speed: { ...DEFAULT_SPEED },
+    colorAdjustments: { ...DEFAULT_COLOR },
+    audio: { ...DEFAULT_AUDIO, volume: 80, fadeInSec: 1.0, fadeOutSec: 1.5 },
+    waveformSamples: generateWaveform(90),
+  },
+];

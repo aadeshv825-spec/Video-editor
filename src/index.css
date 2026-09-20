@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-studio-base: var(--bg-base);
+  --color-studio-surface: var(--bg-surface);
+  --color-studio-muted: var(--bg-muted);
+  --color-studio-border: var(--border-subtle);
+  --color-studio-text: var(--text-primary);
+  --color-studio-text-muted: var(--text-muted);
+  --color-studio-accent: var(--accent);
+}
+
+@layer base {
+  :root {
+    --bg-base: #f9fafb;
+    --bg-surface: #ffffff;
+    --bg-muted: #f3f4f6;
+    --border-subtle: #e5e7eb;
+    --text-primary: #111827;
+    --text-muted: #6b7280;
+    --accent: #18181b;
+    --accent-contrast: #ffffff;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    color-scheme: light;
+  }
+
+  .dark {
+    --bg-base: #0c0e12;
+    --bg-surface: #14171d;
+    --bg-muted: #1c2027;
+    --border-subtle: #272c35;
+    --text-primary: #f9fafb;
+    --text-muted: #9ca3af;
+    --accent: #f4f4f5;
+    --accent-contrast: #09090b;
+    color-scheme: dark;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    touch-action: manipulation;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(140, 150, 165, 0.25);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(140, 150, 165, 0.45);
+  }
+}
+
+/* Theme-aware utility classes mapped to CSS variables */
+.bg-studio-base {
+  background-color: var(--bg-base);
+}
+
+.bg-studio-surface {
+  background-color: var(--bg-surface);
+}
+
+.bg-studio-muted {
+  background-color: var(--bg-muted);
+}
+
+.border-studio-subtle {
+  border-color: var(--border-subtle);
+}
+
+.text-studio-primary {
+  color: var(--text-primary);
+}
+
+.text-studio-muted {
+  color: var(--text-muted);
+}
+
+/* Mobile safe area utilities */
+.safe-padding-top {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+}
+
+.safe-padding-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+.safe-padding-left {
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+}
+
+.safe-padding-right {
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+}
+
+/* Touch targets for mobile compliance (>= 44px) */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+

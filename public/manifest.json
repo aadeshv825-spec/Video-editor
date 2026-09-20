@@ -1,0 +1,17 @@
+{
+  "short_name": "VYRO Studio",
+  "name": "VYRO AI Studio - Next-Gen Creative Suite",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0c0e12",
+  "background_color": "#0c0e12",
+  "orientation": "any",
+  "description": "Professional all-in-one AI Creative Studio with Video, Photo, Audio editors, AI Quality Checker, and Version Snapshots."
+}
