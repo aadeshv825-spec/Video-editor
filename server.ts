@@ -31,6 +31,7 @@ const serverSecrets: Record<string, string> = {
   flux: process.env.BFL_API_KEY || process.env.FLUX_API_KEY || '',
   elevenlabs: process.env.ELEVENLABS_API_KEY || '',
   anthropic: process.env.ANTHROPIC_API_KEY || '',
+  stability: process.env.STABILITY_API_KEY || '',
 };
 
 // Provider metadata and operational state
@@ -53,9 +54,9 @@ const providerStates: Record<string, {
       'veo-3.1-lite-generate-preview',
       'gemini-3.1-flash-image',
       'gemini-3.8-flash',
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      'imagen-3.0-generate-002',
+      'gemini-3.1-pro-preview',
+      'gemini-3.1-flash-tts-preview',
+      'lyria-3-clip-preview',
     ],
   },
   runway: {
@@ -97,6 +98,14 @@ const providerStates: Record<string, {
     lastLatencyMs: null,
     connectionStatus: serverSecrets.anthropic ? 'connected' : 'not_configured',
     models: ['claude-3.7-sonnet-screenplay'],
+  },
+  stability: {
+    name: 'Stability AI (SD 3.5 & SDXL)',
+    enabled: true,
+    lastTestedAt: null,
+    lastLatencyMs: null,
+    connectionStatus: serverSecrets.stability ? 'connected' : 'not_configured',
+    models: ['sd-3.5-large', 'stable-diffusion-xl'],
   },
 };
 
@@ -158,11 +167,19 @@ async function testProviderConnection(providerId: string): Promise<{
   if (providerId === 'google') {
     try {
       const ai = new GoogleGenAI({ apiKey: secret });
-      // Lightweight probe using gemini-3.8-flash
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: 'ping',
-      });
+      // Lightweight probe using gemini-3.6-flash (fallback to gemini-2.5-flash if needed)
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: 'ping',
+        });
+      } catch (probeErr: any) {
+        response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: 'ping',
+        });
+      }
       const latency = Date.now() - start;
       if (response && response.text) {
         return { success: true, latencyMs: latency, message: 'Google Gemini Studio Engine online & responding.' };
@@ -400,6 +417,46 @@ async function startServer() {
         ])
       ),
     });
+  });
+
+  // Server-side Gemini generation endpoint (protects API keys, server-authoritative)
+  app.post('/api/ai/generate', async (req: Request, res: Response) => {
+    const { prompt, model, systemInstruction } = req.body;
+    if (!prompt || typeof prompt !== 'string') {
+      res.status(400).json({ success: false, message: 'Missing prompt' });
+      return;
+    }
+
+    const secret = serverSecrets.google;
+    if (!secret) {
+      res.status(503).json({
+        success: false,
+        message: 'Google Gemini engine is not configured on server.',
+      });
+      return;
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: secret });
+      const targetModel = (typeof model === 'string' && model) ? model : 'gemini-3.8-flash';
+      const response = await ai.models.generateContent({
+        model: targetModel,
+        contents: prompt,
+        config: systemInstruction ? { systemInstruction } : undefined,
+      });
+
+      res.json({
+        success: true,
+        text: response.text || '',
+        model: targetModel,
+      });
+    } catch (err: any) {
+      console.error('Gemini generation error:', err);
+      res.status(500).json({
+        success: false,
+        message: err.message || 'Error executing Gemini generation on server.',
+      });
+    }
   });
 
   // ==========================================

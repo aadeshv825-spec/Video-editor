@@ -143,4 +143,22 @@ export class CreditLedgerService {
 
     return tx;
   }
+
+  public static refundFailedJob(params: {
+    userId: string;
+    amount: number;
+    reason: string;
+    relatedJobId?: string;
+    currentBalance: number;
+  }): CreditTransaction {
+    return this.recordTransaction({
+      userId: params.userId,
+      type: 'refund_failed_job',
+      reason: `Automated Refund: ${params.reason}`,
+      creditsAdded: params.amount,
+      creditsConsumed: 0,
+      relatedJobId: params.relatedJobId,
+      currentBalance: params.currentBalance,
+    });
+  }
 }

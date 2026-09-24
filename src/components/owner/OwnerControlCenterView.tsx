@@ -43,9 +43,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useFeatureFlags } from '../../context/FeatureFlagContext';
 import { PricingConfigService } from '../../services/owner/pricingConfigService';
 import { AuditLogService } from '../../services/owner/auditLogService';
+import { EntitlementService } from '../../services/entitlement/entitlementService';
 import { 
   AuditLogEntry, 
   EntitlementKey, 
+  FeatureEntitlementMap,
+  FeatureTier,
   GlobalFeatureFlags, 
   PricingConfiguration, 
   ProPlanItem, 
@@ -94,6 +97,32 @@ export const OwnerControlCenterView: React.FC<OwnerControlCenterViewProps> = ({
   const [pricingConfig, setPricingConfig] = useState<PricingConfiguration>(() =>
     PricingConfigService.getConfig()
   );
+
+  // Dynamic Free / Pro / Trial Entitlement tiers
+  const [featureTiers, setFeatureTiers] = useState<FeatureEntitlementMap>(() =>
+    EntitlementService.getFeatureTiers()
+  );
+
+  const handleUpdateFeatureTier = (key: EntitlementKey, tier: FeatureTier) => {
+    EntitlementService.setFeatureTier(key, tier);
+    setFeatureTiers(EntitlementService.getFeatureTiers());
+    notify(`Entitlement for "${key.replace(/_/g, ' ')}" set to ${tier.toUpperCase()}`);
+    AuditLogService.record({
+      actorId: currentUser.id,
+      actorName: currentUser.name,
+      actorRole: currentUser.role,
+      action: 'feature_permission_changed',
+      details: `Changed feature tier for ${key} to ${tier.toUpperCase()}`,
+      previousValue: featureTiers[key],
+      newValue: tier,
+    });
+  };
+
+  const handleResetFeatureTiers = () => {
+    EntitlementService.resetFeatureTiers();
+    setFeatureTiers(EntitlementService.getFeatureTiers());
+    notify('Reset all feature entitlement tiers to safe defaults.');
+  };
 
   // Audit logs state
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() =>
@@ -902,6 +931,79 @@ export const OwnerControlCenterView: React.FC<OwnerControlCenterViewProps> = ({
                 </div>
               );
             })}
+          </div>
+
+          {/* Centralized Dynamic Free / Pro Entitlement System */}
+          <div className="pt-6 border-t border-neutral-100 dark:border-neutral-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
+                    Centralized Feature Entitlement Matrix (Free / Trial / Pro / Owner)
+                  </h3>
+                  <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 font-mono text-[10px] font-semibold border border-purple-200 dark:border-purple-800">
+                    DYNAMIC ZERO-CODE
+                  </span>
+                </div>
+                <p className="text-neutral-500 text-xs mt-0.5">
+                  Change feature access tier without rewriting code. Immediate effect across all user sessions.
+                </p>
+              </div>
+              <button
+                onClick={handleResetFeatureTiers}
+                className="px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              >
+                Reset Entitlements
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {(Object.keys(featureTiers) as EntitlementKey[]).map(key => {
+                const currentTier = featureTiers[key];
+                return (
+                  <div
+                    key={key}
+                    className="p-3.5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/30 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-neutral-900 dark:text-neutral-100 capitalize text-xs">
+                        {key.replace(/_/g, ' ')}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase ${
+                          currentTier === 'free'
+                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                            : currentTier === 'trial'
+                            ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                            : currentTier === 'pro'
+                            ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
+                            : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                        }`}
+                      >
+                        {currentTier}
+                      </span>
+                    </div>
+
+                    {/* Tier selector buttons */}
+                    <div className="grid grid-cols-4 gap-1 pt-1">
+                      {(['free', 'trial', 'pro', 'owner'] as FeatureTier[]).map(tier => (
+                        <button
+                          key={tier}
+                          onClick={() => handleUpdateFeatureTier(key, tier)}
+                          className={`py-1 rounded text-[10px] font-mono uppercase font-semibold transition-all ${
+                            currentTier === tier
+                              ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-950 shadow-xs'
+                              : 'bg-white dark:bg-neutral-800 text-neutral-500 hover:text-neutral-900 dark:hover:text-white border border-neutral-200 dark:border-neutral-700'
+                          }`}
+                        >
+                          {tier}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

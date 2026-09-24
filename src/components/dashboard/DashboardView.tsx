@@ -13,7 +13,8 @@ import {
   Settings as SettingsIcon,
   ChevronRight,
   AlertCircle,
-  ArrowUpRight
+  ArrowUpRight,
+  LayoutTemplate,
 } from 'lucide-react';
 import { useProjects } from '../../context/ProjectContext';
 import { useAuth } from '../../context/AuthContext';
@@ -90,6 +91,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       icon: Sparkles,
       enabled: true,
       badge: 'Gen AI',
+    },
+    {
+      id: 'templates' as StudioType,
+      title: 'Templates',
+      description: 'Trending presets, beat-sync cuts, reels & shorts creation',
+      icon: LayoutTemplate,
+      enabled: true,
+      badge: 'Templates',
     },
   ];
 

@@ -97,16 +97,19 @@ class ProviderStatusServiceClass {
   }
 
   public getProvider(id: string): ProviderConnectionInfo | undefined {
-    return this.providers.get(id);
+    const key = id === 'gemini' ? 'google' : id;
+    return this.providers.get(key) || this.providers.get(id);
   }
 
   public isProviderConfigured(providerId: string): boolean {
-    const prov = this.providers.get(providerId);
+    const key = providerId === 'gemini' ? 'google' : providerId;
+    const prov = this.providers.get(key) || this.providers.get(providerId);
     return Boolean(prov?.isConfigured && prov?.isEnabled);
   }
 
   public isProviderOperational(providerId: string): boolean {
-    const prov = this.providers.get(providerId);
+    const key = providerId === 'gemini' ? 'google' : providerId;
+    const prov = this.providers.get(key) || this.providers.get(providerId);
     if (!prov) return false;
     return prov.isConfigured && prov.isEnabled && prov.connectionStatus === 'connected';
   }
@@ -243,7 +246,7 @@ class ProviderStatusServiceClass {
     // 3. Provider Readiness Check (Server-Side Verification)
     const pType = model.providerType || 'gemini';
     if (pType !== 'local') {
-      const provider = this.providers.get(pType);
+      const provider = this.getProvider(pType);
       
       // If server has reported on this provider
       if (provider) {
@@ -282,7 +285,14 @@ class ProviderStatusServiceClass {
             suggestedAlternativeModelId: 'veo-3.1-lite-generate-preview',
           };
         }
-      } else if (pType === 'runway' || pType === 'openai' || pType === 'flux' || pType === 'elevenlabs' || pType === 'anthropic') {
+      } else if (
+        pType === 'runway' ||
+        pType === 'openai' ||
+        pType === 'flux' ||
+        pType === 'elevenlabs' ||
+        pType === 'anthropic' ||
+        pType === 'stability'
+      ) {
         // Not configured in server provider map
         return {
           state: 'CONFIGURATION_REQUIRED',

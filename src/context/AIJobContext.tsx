@@ -170,8 +170,8 @@ export const AIJobProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const targetJob = jobs.find(j => j.id === jobId);
     if (!targetJob) return false;
 
-    const chosenModelId = fallbackModelId || (targetJob.modelId === 'gemini-2.5-pro' ? 'gemini-2.5-flash' : 'gemini-2.5-flash');
-    const chosenModelName = chosenModelId.includes('flash') ? 'Gemini 2.5 Flash' : 'Gemini 2.5 Pro';
+    const chosenModelId = fallbackModelId || (targetJob.modelId === 'gemini-3.1-pro-preview' ? 'gemini-3.8-flash' : 'gemini-3.8-flash');
+    const chosenModelName = chosenModelId.includes('flash') ? 'Gemini 3.8 Flash' : 'Gemini 3.1 Pro';
 
     updateJobStatus(jobId, 'ANALYZING', {
       modelId: chosenModelId,

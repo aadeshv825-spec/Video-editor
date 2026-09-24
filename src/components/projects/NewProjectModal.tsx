@@ -47,6 +47,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
       director: 'AI Director Project',
       tools: 'AI Tools Workspace',
       generate: 'AI Generation Workspace',
+      templates: 'Template Project',
     };
 
     createProject({

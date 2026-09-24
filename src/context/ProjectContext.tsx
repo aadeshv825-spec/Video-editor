@@ -16,7 +16,7 @@ interface ProjectContextType {
   createProject: (params: {
     title: string;
     type: StudioType;
-    aspectRatio?: '16:9' | '9:16' | '1:1' | '21:9' | '4:5';
+    aspectRatio?: '16:9' | '9:16' | '1:1' | '21:9' | '4:5' | '4:3';
     resolution?: '720p' | '1080p' | '4K';
     fps?: number;
   }) => Project;
@@ -270,7 +270,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }: {
     title: string;
     type: StudioType;
-    aspectRatio?: '16:9' | '9:16' | '1:1' | '21:9' | '4:5';
+    aspectRatio?: '16:9' | '9:16' | '1:1' | '21:9' | '4:5' | '4:3';
     resolution?: '720p' | '1080p' | '4K';
     fps?: number;
   }): Project => {

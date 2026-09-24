@@ -18,6 +18,7 @@ import { PhotoStudioStudio } from './components/studios/PhotoStudioStudio';
 import { AudioStudioStudio } from './components/studios/AudioStudioStudio';
 import { AIToolsStudio } from './components/studios/AIToolsStudio';
 import { AIGenerationStudio } from './components/studios/generation/AIGenerationStudio';
+import { TemplateStudio } from './components/studios/templates/TemplateStudio';
 import { ProjectsView } from './components/projects/ProjectsView';
 import { SettingsView } from './components/settings/SettingsView';
 import { OwnerControlCenterView } from './components/owner/OwnerControlCenterView';
@@ -349,6 +350,19 @@ function MainApp() {
               onBack={handleBackToDashboard}
               onOpenSettings={() => setCurrentView('settings')}
               onNavigateToStudio={studio => setCurrentView(studio)}
+            />
+          </ErrorBoundary>
+        )}
+
+        {currentView === 'templates' && (
+          <ErrorBoundary moduleName="Template Studio" fallbackView="panel" onReset={handleBackToDashboard}>
+            <TemplateStudio
+              onBack={handleBackToDashboard}
+              onOpenVideoEditor={(projectId) => {
+                openProject(projectId);
+                setCurrentView('video');
+              }}
+              onOpenPro={() => setIsProOpen(true)}
             />
           </ErrorBoundary>
         )}

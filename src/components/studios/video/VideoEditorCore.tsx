@@ -18,6 +18,7 @@ import {
   Wand2,
   Maximize2,
   Minimize2,
+  Bot,
 } from 'lucide-react';
 import { useProjects } from '../../../context/ProjectContext';
 import { useRenderQueue } from '../../../context/RenderQueueContext';
@@ -27,6 +28,8 @@ import {
   TimelineTrack,
   VideoEditorState,
   TimelineMarker,
+  CanvasBackgroundSettings,
+  CaptionStyle,
 } from '../../../types/videoEditor';
 import {
   INITIAL_TRACKS,
@@ -48,6 +51,7 @@ import { LocalExportModal } from './LocalExportModal';
 import { RenderQueueModal } from './RenderQueueModal';
 import { QualityCheckerModal } from '../quality/QualityCheckerModal';
 import { AutoEditModal } from '../autoedit/AutoEditModal';
+import { AskVyroAssistantModal } from './AskVyroAssistantModal';
 import { MobileVideoToolTray } from './MobileVideoToolTray';
 import { MobileVideoToolSheet, MobileToolSheetType } from './MobileVideoToolSheet';
 
@@ -107,12 +111,25 @@ export const VideoEditorCore: React.FC<VideoEditorCoreProps> = ({
   const [sequenceBreadcrumbs, setSequenceBreadcrumbs] = useState<{ id: string; title: string }[]>([]);
   const [parentSequenceClips, setParentSequenceClips] = useState<TimelineClip[] | null>(null);
 
+  // Canvas & Subtitle Settings (CapCut parity)
+  const [canvasBackground, setCanvasBackground] = useState<CanvasBackgroundSettings>(() => (savedState as any).canvasBackground || { type: 'color', color: '#000000' });
+  const [captions, setCaptions] = useState<Array<{ id: string; startSec: number; endSec: number; text: string }>>(() => (savedState as any).captions || []);
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(() => (savedState as any).captionStyle || {
+    fontFamily: 'Inter, sans-serif',
+    fontSize: 20,
+    textColor: '#FFFFFF',
+    bgColor: 'rgba(0, 0, 0, 0.75)',
+    position: 'bottom',
+    animation: 'none',
+  });
+
   // Layout UI states
   const [isMediaBinOpen, setIsMediaBinOpen] = useState(true);
   const [isLocalExportModalOpen, setIsLocalExportModalOpen] = useState(false);
   const [isRenderQueueOpen, setIsRenderQueueOpen] = useState(false);
   const [isQualityCheckerOpen, setIsQualityCheckerOpen] = useState(false);
   const [isAutoEditOpen, setIsAutoEditOpen] = useState(false);
+  const [isAskVyroOpen, setIsAskVyroOpen] = useState(false);
   const [autoEditTab, setAutoEditTab] = useState<'auto_cut' | 'beat_sync' | 'color_match' | 'best_take'>('auto_cut');
   const [targetQualityMedia, setTargetQualityMedia] = useState<MediaAsset | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -413,6 +430,68 @@ export const VideoEditorCore: React.FC<VideoEditorCoreProps> = ({
 
   const handleDeleteMarker = (markerId: string) => {
     setMarkers(prev => prev.filter(m => m.id !== markerId));
+  };
+
+  // Freeze Frame at Playhead (CapCut parity)
+  const handleFreezeClip = (clipId: string) => {
+    const target = clips.find(c => c.id === clipId);
+    if (!target) return;
+    const freezeClip: TimelineClip = {
+      ...target,
+      id: `freeze-${Date.now()}`,
+      title: `${target.title} (Freeze)`,
+      startSec: playheadSec,
+      durationSec: 2.0,
+      isFrozen: true,
+      speed: { ...target.speed, speed: 0, freezeFrame: true },
+    };
+    setClips(prev => [...prev, freezeClip]);
+    setSelectedClipId(freezeClip.id);
+    recordEditAction('FREEZE_FRAME', `Created 2s Freeze Frame of "${target.title}"`);
+  };
+
+  // Extract Audio from Clip (CapCut parity)
+  const handleExtractAudio = (clipId: string) => {
+    const target = clips.find(c => c.id === clipId);
+    if (!target) return;
+    let audioTrack = tracks.find(t => t.type === 'audio');
+    if (!audioTrack) {
+      audioTrack = {
+        id: `a-${Date.now()}`,
+        label: 'Extracted Audio',
+        type: 'audio',
+        muted: false,
+        solo: false,
+        locked: false,
+        hidden: false,
+        volume: 100,
+      };
+      setTracks(prev => [...prev, audioTrack!]);
+    }
+    const extractedClip: TimelineClip = {
+      id: `audio-ext-${Date.now()}`,
+      trackId: audioTrack.id,
+      title: `${target.title} (Audio)`,
+      type: 'audio',
+      mediaAssetId: target.mediaAssetId,
+      startSec: target.startSec,
+      durationSec: target.durationSec,
+      trimInSec: target.trimInSec,
+      trimOutSec: target.trimOutSec,
+      colorBadge: '#10b981',
+      keyframes: [],
+      transform: { ...DEFAULT_TRANSFORM },
+      speed: { ...target.speed },
+      colorAdjustments: { ...DEFAULT_COLOR },
+      audio: { ...target.audio, volume: target.audio.volume || 100, muted: false },
+      waveformSamples: target.waveformSamples || generateWaveform(50),
+    };
+    setClips(prev => [
+      ...prev.map(c => (c.id === clipId ? { ...c, extractedAudioClipId: extractedClip.id, audio: { ...c.audio, muted: true } } : c)),
+      extractedClip,
+    ]);
+    setSelectedClipId(extractedClip.id);
+    recordEditAction('EXTRACT_AUDIO', `Extracted audio from "${target.title}"`);
   };
 
   // Create Compound Clip
@@ -737,6 +816,16 @@ export const VideoEditorCore: React.FC<VideoEditorCoreProps> = ({
             <span>Media Bin</span>
           </button>
 
+          {/* Ask VYRO - Smart Creator AI Edit Assistant */}
+          <button
+            onClick={() => setIsAskVyroOpen(true)}
+            className="px-2.5 py-1 rounded border border-purple-800 bg-purple-950/50 hover:bg-purple-900/60 text-purple-200 text-[11px] font-semibold flex items-center gap-1.5 transition-colors shadow-xs shadow-purple-950/40"
+            title="Ask VYRO: Natural language commands, transcript editing, smart beat sync & B-roll"
+          >
+            <Bot className="w-3.5 h-3.5 text-purple-400" />
+            <span>Ask VYRO</span>
+          </button>
+
           {/* AI Quality Checker */}
           <button
             onClick={() => {
@@ -883,6 +972,9 @@ export const VideoEditorCore: React.FC<VideoEditorCoreProps> = ({
             onSeek={time => setPlayheadSec(Math.max(0, Math.min(totalDurationSec, time)))}
             onOpenRenderQueue={() => setIsRenderQueueOpen(true)}
             activeJobsCount={activeJobCount}
+            canvasBackground={canvasBackground}
+            captions={captions}
+            captionStyle={captionStyle}
           />
         </div>
 
@@ -901,6 +993,14 @@ export const VideoEditorCore: React.FC<VideoEditorCoreProps> = ({
               onCopyAttributes={handleCopyAttributes}
               onPasteAttributes={handlePasteAttributes}
               hasClipboard={!!clipboardAttributes}
+              onFreezeClip={handleFreezeClip}
+              onExtractAudio={handleExtractAudio}
+              canvasBackground={canvasBackground}
+              onUpdateCanvasBackground={setCanvasBackground}
+              captions={captions}
+              onUpdateCaptions={setCaptions}
+              captionStyle={captionStyle}
+              onUpdateCaptionStyle={setCaptionStyle}
             />
           </div>
         )}
@@ -1043,6 +1143,24 @@ export const VideoEditorCore: React.FC<VideoEditorCoreProps> = ({
         isOpen={isAutoEditOpen}
         onClose={() => setIsAutoEditOpen(false)}
         defaultTab={autoEditTab}
+      />
+
+      {/* Ask VYRO - Smart Creator AI Edit Assistant Modal */}
+      <AskVyroAssistantModal
+        isOpen={isAskVyroOpen}
+        onClose={() => setIsAskVyroOpen(false)}
+        clips={clips}
+        tracks={tracks}
+        onUpdateClips={setClips}
+        onUpdateTracks={setTracks}
+        onAddCaptions={newCaps => {
+          setCaptions(prev => [...prev, ...newCaps]);
+        }}
+        onOpenAutoEdit={tab => {
+          setIsAskVyroOpen(false);
+          setAutoEditTab(tab);
+          setIsAutoEditOpen(true);
+        }}
       />
     </div>
   );

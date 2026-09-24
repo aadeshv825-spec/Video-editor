@@ -16,7 +16,7 @@ import {
   Cpu,
   Layers,
 } from 'lucide-react';
-import { TimelineClip, TimelineTrack } from '../../../types/videoEditor';
+import { TimelineClip, TimelineTrack, CanvasBackgroundSettings, CaptionStyle } from '../../../types/videoEditor';
 
 interface VideoPreviewMonitorProps {
   tracks: TimelineTrack[];
@@ -25,13 +25,21 @@ interface VideoPreviewMonitorProps {
   totalDurationSec: number;
   isPlaying: boolean;
   fps?: number;
-  aspectRatio?: '16:9' | '9:16' | '1:1' | '21:9' | '4:5';
+  aspectRatio?: '16:9' | '9:16' | '1:1' | '21:9' | '4:5' | '4:3';
   resolution?: string;
   selectedClipId: string | null;
   onTogglePlay: () => void;
   onSeek: (timeSec: number) => void;
   onOpenRenderQueue?: () => void;
   activeJobsCount?: number;
+  canvasBackground?: CanvasBackgroundSettings;
+  captions?: Array<{
+    id: string;
+    startSec: number;
+    endSec: number;
+    text: string;
+  }>;
+  captionStyle?: CaptionStyle;
 }
 
 export const VideoPreviewMonitor: React.FC<VideoPreviewMonitorProps> = ({
@@ -48,6 +56,9 @@ export const VideoPreviewMonitor: React.FC<VideoPreviewMonitorProps> = ({
   onSeek,
   onOpenRenderQueue,
   activeJobsCount = 0,
+  canvasBackground,
+  captions = [],
+  captionStyle,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -104,11 +115,21 @@ export const VideoPreviewMonitor: React.FC<VideoPreviewMonitorProps> = ({
         return 'aspect-[21/9] max-w-[760px]';
       case '4:5':
         return 'aspect-[4/5] max-w-[360px]';
+      case '4:3':
+        return 'aspect-[4/3] max-w-[540px]';
       case '16:9':
       default:
         return 'aspect-video max-w-[640px]';
     }
   };
+
+  // Find active subtitle/caption at playhead
+  const activeCaption = captions.find(
+    c => playheadSec >= c.startSec && playheadSec <= c.endSec
+  );
+
+  // Background blurred backdrop clip (if canvasBackground type is blur)
+  const primaryVisualClip = visualClips.find(c => c.url);
 
   // Step frame by frame
   const handleStepFrame = (direction: -1 | 1) => {
@@ -224,7 +245,25 @@ export const VideoPreviewMonitor: React.FC<VideoPreviewMonitorProps> = ({
         <div
           id="preview-viewport-frame"
           className={`w-full relative shadow-2xl rounded-sm overflow-hidden bg-black border border-neutral-800/80 ${getAspectRatioClass()}`}
+          style={{
+            backgroundColor:
+              canvasBackground?.type === 'color' ? canvasBackground.color || '#000000' : '#000000',
+            backgroundImage:
+              canvasBackground?.type === 'gradient' ? canvasBackground.gradient : undefined,
+          }}
         >
+          {/* Blurred Video Background (CapCut Canvas Blur) */}
+          {canvasBackground?.type === 'blur' && primaryVisualClip?.url && (
+            <div
+              className="absolute inset-0 pointer-events-none scale-125 filter blur-xl opacity-60 transition-all duration-300"
+              style={{
+                backgroundImage: `url(${primaryVisualClip.url})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            />
+          )}
+
           {visualClips.length === 0 ? (
             <div className="w-full h-full flex flex-col items-center justify-center text-neutral-600 font-mono text-xs p-4 text-center">
               <p>Black Frame (No media at playhead)</p>
@@ -238,44 +277,166 @@ export const VideoPreviewMonitor: React.FC<VideoPreviewMonitorProps> = ({
               const clipRemaining = clip.startSec + clip.durationSec - playheadSec;
               const clipElapsed = playheadSec - clip.startSec;
 
-              // Transitions opacity
+              // Transitions: Opacity, Dynamic Scale, Translation, & FX
               let transitionOpacity = 1;
+              let transScale = 1;
+              let transTranslateX = 0;
+              let transTranslateY = 0;
+              let transBrightness = 1;
+              let transBlur = 0;
+
+              // Transition IN calculations
               if (
                 transitionIn &&
                 transitionIn.type !== 'none' &&
                 clipElapsed < transitionIn.durationSec
               ) {
                 const ratio = Math.max(0, clipElapsed / transitionIn.durationSec);
-                if (transitionIn.type === 'crossfade' || transitionIn.type === 'dip-black') {
-                  transitionOpacity = ratio;
+                switch (transitionIn.type) {
+                  case 'crossfade':
+                  case 'film-dissolve':
+                  case 'dip-black':
+                    transitionOpacity = ratio;
+                    break;
+                  case 'dip-white':
+                  case 'flash':
+                    transitionOpacity = ratio;
+                    transBrightness = 1 + (1 - ratio) * 2.0;
+                    break;
+                  case 'zoom-in':
+                    transitionOpacity = ratio;
+                    transScale = 0.7 + ratio * 0.3;
+                    break;
+                  case 'zoom-out':
+                    transitionOpacity = ratio;
+                    transScale = 1.3 - (1 - ratio) * 0.3;
+                    break;
+                  case 'slide-left':
+                  case 'push-left':
+                    transTranslateX = (1 - ratio) * 100;
+                    break;
+                  case 'slide-right':
+                  case 'push-right':
+                    transTranslateX = -(1 - ratio) * 100;
+                    break;
+                  case 'slide-up':
+                    transTranslateY = (1 - ratio) * 100;
+                    break;
+                  case 'slide-down':
+                    transTranslateY = -(1 - ratio) * 100;
+                    break;
+                  case 'whip-pan':
+                    transTranslateX = (1 - ratio) * 80;
+                    transBlur = (1 - ratio) * 8;
+                    break;
+                  case 'motion-blur-dissolve':
+                    transitionOpacity = ratio;
+                    transBlur = (1 - ratio) * 6;
+                    break;
+                  default:
+                    transitionOpacity = ratio;
+                    break;
                 }
               } else if (
                 transitionOut &&
                 transitionOut.type !== 'none' &&
                 clipRemaining < transitionOut.durationSec
               ) {
+                // Transition OUT calculations
                 const ratio = Math.max(0, clipRemaining / transitionOut.durationSec);
-                if (transitionOut.type === 'crossfade' || transitionOut.type === 'dip-black') {
-                  transitionOpacity *= ratio;
+                switch (transitionOut.type) {
+                  case 'crossfade':
+                  case 'film-dissolve':
+                  case 'dip-black':
+                    transitionOpacity *= ratio;
+                    break;
+                  case 'dip-white':
+                  case 'flash':
+                    transBrightness = 1 + (1 - ratio) * 2.0;
+                    transitionOpacity *= ratio;
+                    break;
+                  case 'zoom-in':
+                    transScale = 1 + (1 - ratio) * 0.3;
+                    transitionOpacity *= ratio;
+                    break;
+                  case 'zoom-out':
+                    transScale = 1 - (1 - ratio) * 0.3;
+                    transitionOpacity *= ratio;
+                    break;
+                  case 'slide-left':
+                  case 'push-left':
+                    transTranslateX = -(1 - ratio) * 100;
+                    break;
+                  case 'slide-right':
+                  case 'push-right':
+                    transTranslateX = (1 - ratio) * 100;
+                    break;
+                  case 'slide-up':
+                    transTranslateY = -(1 - ratio) * 100;
+                    break;
+                  case 'slide-down':
+                    transTranslateY = (1 - ratio) * 100;
+                    break;
+                  case 'whip-pan':
+                    transTranslateX = -(1 - ratio) * 80;
+                    transBlur = (1 - ratio) * 8;
+                    break;
+                  case 'motion-blur-dissolve':
+                    transitionOpacity *= ratio;
+                    transBlur = (1 - ratio) * 6;
+                    break;
+                  default:
+                    transitionOpacity *= ratio;
+                    break;
                 }
               }
 
               // Transform CSS
               const transformString = `
-                translate(${transform.positionX}px, ${transform.positionY}px)
-                scale(${transform.scale / 100})
+                translate(${transform.positionX + transTranslateX}px, ${transform.positionY + transTranslateY}px)
+                scale(${(transform.scale / 100) * transScale})
                 rotate(${transform.rotation}deg)
                 scaleX(${transform.flipHorizontal ? -1 : 1})
                 scaleY(${transform.flipVertical ? -1 : 1})
               `;
 
               // Color adjustments CSS filters
-              // If split comparison active, suppress color grades on left side
-              const effectiveBrightness = 100 + colorAdjustments.brightness + colorAdjustments.exposure * 0.5;
+              const effectiveBrightness = (100 + colorAdjustments.brightness + colorAdjustments.exposure * 0.5) * transBrightness;
               const effectiveContrast = 100 + colorAdjustments.contrast;
               const effectiveSaturation = colorAdjustments.saturation;
-              const effectiveBlur = colorAdjustments.blur;
+              const effectiveBlur = colorAdjustments.blur + transBlur;
               const effectiveHue = colorAdjustments.tint * 0.8;
+
+              // Filter Presets CSS
+              let presetFilter = '';
+              if (clip.filterPreset && clip.filterPreset !== 'none') {
+                switch (clip.filterPreset) {
+                  case 'vintage-70s':
+                    presetFilter = 'sepia(35%) contrast(110%) saturate(120%) brightness(95%)';
+                    break;
+                  case 'cyberpunk':
+                    presetFilter = 'contrast(130%) saturate(160%) hue-rotate(290deg)';
+                    break;
+                  case 'noir':
+                    presetFilter = 'grayscale(100%) contrast(140%) brightness(90%)';
+                    break;
+                  case 'teal-orange':
+                    presetFilter = 'contrast(115%) saturate(130%) hue-rotate(15deg)';
+                    break;
+                  case 'warm-sunset':
+                    presetFilter = 'sepia(25%) saturate(140%) brightness(105%)';
+                    break;
+                  case 'cold-fresh':
+                    presetFilter = 'hue-rotate(180deg) saturate(110%) contrast(105%)';
+                    break;
+                  case 'vhs-glitch':
+                    presetFilter = 'contrast(125%) saturate(140%) brightness(110%)';
+                    break;
+                  case 'film-grain':
+                    presetFilter = 'contrast(115%) brightness(95%)';
+                    break;
+                }
+              }
 
               const filterString = showSplitCompare
                 ? 'none'
@@ -285,6 +446,7 @@ export const VideoPreviewMonitor: React.FC<VideoPreviewMonitorProps> = ({
                 saturate(${effectiveSaturation}%)
                 hue-rotate(${effectiveHue}deg)
                 blur(${effectiveBlur}px)
+                ${presetFilter}
               `;
 
               // Crop clip-path
@@ -309,6 +471,14 @@ export const VideoPreviewMonitor: React.FC<VideoPreviewMonitorProps> = ({
 
               const isSelected = clip.id === selectedClipId;
               const blendMode = (transform.blendMode as any) || 'normal';
+
+              // Fit Mode image class
+              const fitClass =
+                transform.fitMode === 'fit'
+                  ? 'object-contain'
+                  : transform.fitMode === 'stretch'
+                  ? 'object-fill'
+                  : 'object-cover';
 
               // Chroma Key Matte Preview Mode
               const isChromaMatte = clip.chromaKey?.enabled && clip.chromaKey.mattePreview === 'matte';
@@ -342,7 +512,7 @@ export const VideoPreviewMonitor: React.FC<VideoPreviewMonitorProps> = ({
                           src={clip.url}
                           alt={clip.title}
                           referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover"
+                          className={`w-full h-full ${fitClass}`}
                         />
                       ) : (
                         <div className="w-full h-full bg-gradient-to-tr from-neutral-900 to-neutral-800 flex items-center justify-center text-neutral-400 font-mono text-sm">
@@ -387,6 +557,40 @@ export const VideoPreviewMonitor: React.FC<VideoPreviewMonitorProps> = ({
                 </div>
               );
             })
+          )}
+
+          {/* Active Subtitle / Auto-Caption Overlay */}
+          {activeCaption && (
+            <div
+              className={`absolute inset-x-4 pointer-events-none z-25 flex items-center justify-center transition-all ${
+                captionStyle?.position === 'top'
+                  ? 'top-6'
+                  : captionStyle?.position === 'middle'
+                  ? 'top-1/2 -translate-y-1/2'
+                  : 'bottom-6'
+              }`}
+            >
+              <div
+                className={`px-4 py-1.5 rounded-lg text-center font-bold tracking-wide shadow-2xl select-none max-w-[85%] ${
+                  captionStyle?.animation === 'pop'
+                    ? 'animate-bounce'
+                    : captionStyle?.animation === 'fade'
+                    ? 'animate-fade'
+                    : ''
+                }`}
+                style={{
+                  fontFamily: captionStyle?.fontFamily || 'Inter, sans-serif',
+                  fontSize: `${captionStyle?.fontSize || 20}px`,
+                  color: captionStyle?.textColor || '#FFFFFF',
+                  backgroundColor: captionStyle?.bgColor || 'rgba(0, 0, 0, 0.75)',
+                  textShadow: captionStyle?.strokeWidth
+                    ? `0 0 ${captionStyle.strokeWidth}px ${captionStyle.strokeColor || '#000000'}`
+                    : '0 2px 6px rgba(0,0,0,0.9)',
+                }}
+              >
+                {activeCaption.text}
+              </div>
+            </div>
           )}
 
           {/* Active Adjustment Layer Filter Composited on Top of Scene */}

@@ -286,6 +286,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <span>or continue with email</span>
                 <span className="flex-1 h-px bg-neutral-200 dark:bg-neutral-800" />
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  // Switch to guest/creator mode
+                  const guestUser = users.find(u => u.role === 'creator' || u.role === 'user');
+                  if (guestUser) {
+                    switchUserPersona(guestUser.id);
+                  }
+                  onClose();
+                }}
+                className="w-full py-1.5 px-3 rounded-lg border border-dashed border-neutral-300 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-600 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 text-[11px] font-medium transition-colors text-center"
+              >
+                Continue as Guest (Explore without signing in)
+              </button>
             </div>
           )}
 

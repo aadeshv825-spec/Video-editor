@@ -14,6 +14,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isPro: boolean;
   deductCredits: (amount: number, reason?: string, jobInfo?: { jobId?: string; model?: string }) => boolean;
+  refundCredits: (amount: number, reason?: string, jobInfo?: { jobId?: string; model?: string }) => void;
   canAccessTool: (toolId: string) => boolean;
   canAccessEntitlement: (key: EntitlementKey) => boolean;
   signIn: (email: string, pass?: string) => Promise<{ success: boolean; error?: string }>;
@@ -818,6 +819,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true;
   };
 
+  const refundCredits = (
+    amount: number,
+    reason?: string,
+    jobInfo?: { jobId?: string; model?: string }
+  ) => {
+    if (amount <= 0) return;
+
+    setUsers(prev =>
+      prev.map(u => (u.id === currentUserId ? { ...u, aiCredits: u.aiCredits + amount } : u))
+    );
+
+    CreditLedgerService.recordTransaction({
+      userId: currentUser.id,
+      type: 'refund_failed_job',
+      reason: reason || 'Refund for failed or cancelled AI operation',
+      creditsAdded: amount,
+      creditsConsumed: 0,
+      relatedJobId: jobInfo?.jobId,
+      modelOrProvider: jobInfo?.model,
+      currentBalance: currentUser.aiCredits,
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -828,6 +852,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin,
         isPro,
         deductCredits,
+        refundCredits,
         canAccessTool,
         canAccessEntitlement,
         signIn,

@@ -27,6 +27,10 @@ export type EntitlementKey =
   | 'cloud_features'
   | 'ai_credits';
 
+export type FeatureTier = 'free' | 'trial' | 'pro' | 'owner';
+
+export type FeatureEntitlementMap = Record<EntitlementKey, FeatureTier>;
+
 export interface User {
   id: string;
   name: string;
@@ -62,7 +66,7 @@ export interface User {
   }>;
 }
 
-export type StudioType = 'director' | 'video' | 'photo' | 'audio' | 'tools' | 'generate';
+export type StudioType = 'director' | 'video' | 'photo' | 'audio' | 'tools' | 'generate' | 'templates';
 
 export interface MediaAsset {
   id: string;
@@ -117,7 +121,7 @@ export interface Project {
   cloudSyncedAt?: string;
   syncStatus?: SyncStatus;
   cloudVersion?: number;
-  aspectRatio: '16:9' | '9:16' | '1:1' | '21:9' | '4:5';
+  aspectRatio: '16:9' | '9:16' | '1:1' | '21:9' | '4:5' | '4:3';
   resolution: '720p' | '1080p' | '4K';
   fps: number;
   mediaAssets: MediaAsset[];
@@ -268,10 +272,12 @@ export interface AIModel {
 
 export interface ModelRouteQuery {
   capability: ModelCapability;
+  inputType?: string;
   preferSpeed?: boolean;
   preferQuality?: boolean;
   maxCostCredits?: number;
   minResolution?: string;
+  targetDurationSec?: number;
 }
 
 export interface GlobalFeatureFlags {
@@ -359,7 +365,7 @@ export interface AppSettings {
   };
   // 11. Language
   language: {
-    currentLanguage: 'en' | 'de' | 'fr' | 'es' | 'ja' | 'zh';
+    currentLanguage: 'en' | 'hi' | 'de' | 'fr' | 'es' | 'ja' | 'zh';
     timecodeFormat: 'smpte' | 'milliseconds' | 'frames';
   };
   // 12. Pro

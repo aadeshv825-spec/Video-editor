@@ -67,11 +67,32 @@ export const ModelRouterProvider: React.FC<{ children: React.ReactNode }> = ({ c
    * Selects strictly among configured, operational, user-entitled, and compatible models.
    */
   const routeBestModel = (query: ModelRouteQuery): ExtendedAIModel => {
-    // 1. Get truly available candidates
+    // 1. Get truly available candidates matching capability
     let candidates = filterModelsByCapability(query.capability);
 
-    // 2. Filter by user entitlement (Free user on Pro model)
-    if (!isPro) {
+    // 1b. Filter by input type if requested
+    if (query.inputType) {
+      const inputMatches = candidates.filter(m =>
+        m.inputTypes.some(t => t.toLowerCase() === query.inputType!.toLowerCase())
+      );
+      if (inputMatches.length > 0) {
+        candidates = inputMatches;
+      }
+    }
+
+    // 1c. Filter by target duration if requested
+    if (query.targetDurationSec) {
+      const durationMatches = candidates.filter(
+        m => (m.durationLimitSec || m.supportedMaxDurationSec || 60) >= query.targetDurationSec!
+      );
+      if (durationMatches.length > 0) {
+        candidates = durationMatches;
+      }
+    }
+
+    // 2. Filter by user entitlement (Free user on Pro model; owner bypasses)
+    const isOwner = currentUser?.role === 'owner';
+    if (!isPro && !isOwner) {
       const freeCandidates = candidates.filter(m => !m.isProOnly);
       if (freeCandidates.length > 0) {
         candidates = freeCandidates;
@@ -80,7 +101,7 @@ export const ModelRouterProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     // 3. Filter by user credits budget
     const userCredits = currentUser?.aiCredits ?? 100;
-    if (userCredits > 0) {
+    if (userCredits > 0 && !isOwner) {
       const budgetCandidates = candidates.filter(m => m.costPerUnit <= userCredits);
       if (budgetCandidates.length > 0) {
         candidates = budgetCandidates;
@@ -88,12 +109,24 @@ export const ModelRouterProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     if (candidates.length === 0) {
-      // Fallback to default reliable Google engine or local engine
+      // Strictly pick among configured and operational models in the same capability
+      const availableModels = models.filter(
+        m =>
+          m.availability === 'online' &&
+          (m.providerType === 'local' ||
+            m.providerType === 'gemini' ||
+            ProviderStatusService.isProviderConfigured(m.providerType || ''))
+      );
+
+      const matchingCap = availableModels.find(m => m.capabilities.includes(query.capability));
       const safeDefault =
-        models.find(m => m.id === 'veo-3.1-lite-generate-preview') ||
-        models.find(m => m.id === 'gemini-3.1-flash-image') ||
-        models.find(m => m.id === 'creative-director-local') ||
+        matchingCap ||
+        availableModels.find(m => m.id === 'veo-3.1-lite-generate-preview') ||
+        availableModels.find(m => m.id === 'gemini-3.1-flash-image') ||
+        availableModels.find(m => m.id === 'creative-director-local') ||
+        availableModels[0] ||
         models[0];
+
       if (isAutoRouting) {
         setSelectedModelId(safeDefault.id);
       }

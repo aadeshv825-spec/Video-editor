@@ -46,6 +46,7 @@ export interface TransformProperties {
   blendMode?: BlendMode;
   cropPreset?: string;
   autoCenterTracking?: boolean;
+  fitMode?: 'fit' | 'fill' | 'stretch' | 'original';
 }
 
 export type KeyframeInterpolation = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'bezier';
@@ -383,9 +384,17 @@ export type TransitionType =
   | 'wipe-down'
   | 'slide-left'
   | 'slide-right'
+  | 'slide-up'
+  | 'slide-down'
   | 'zoom-in'
   | 'zoom-out'
-  | 'motion-blur-dissolve';
+  | 'motion-blur-dissolve'
+  | 'glitch'
+  | 'flash'
+  | 'push-left'
+  | 'push-right'
+  | 'split'
+  | 'whip-pan';
 
 export interface Transition {
   type: TransitionType;
@@ -432,6 +441,11 @@ export interface TimelineClip {
   resolutionTag?: string;
   matteApplied?: boolean;
   alphaCutout?: boolean;
+  // Enhanced editing attributes
+  filterPreset?: string;
+  isFrozen?: boolean;
+  freezeDurationSec?: number;
+  extractedAudioClipId?: string;
 }
 
 export interface TimelineMarker {
@@ -484,6 +498,26 @@ export interface PerformanceSettings {
   lowResPreview: boolean;
 }
 
+export type CanvasBackgroundType = 'color' | 'blur' | 'gradient';
+
+export interface CanvasBackgroundSettings {
+  type: CanvasBackgroundType;
+  color?: string; // hex color e.g. '#000000', '#ffffff', '#1e293b'
+  blurIntensity?: number; // 5 to 40 px
+  gradient?: string; // e.g. 'linear-gradient(135deg, #1e1e24 0%, #2a2b36 100%)'
+}
+
+export interface CaptionStyle {
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  bgColor?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  position: 'bottom' | 'middle' | 'top';
+  animation: 'none' | 'pop' | 'fade' | 'bounce';
+}
+
 export interface VideoEditorState {
   tracks: TimelineTrack[];
   clips: TimelineClip[];
@@ -499,4 +533,12 @@ export interface VideoEditorState {
   performanceSettings?: PerformanceSettings;
   clipboardAttributes?: ClipboardAttributes | null;
   tracksHeight?: 'compact' | 'standard' | 'expanded';
+  canvasBackground?: CanvasBackgroundSettings;
+  captions?: Array<{
+    id: string;
+    startSec: number;
+    endSec: number;
+    text: string;
+  }>;
+  captionStyle?: CaptionStyle;
 }

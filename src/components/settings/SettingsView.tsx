@@ -689,6 +689,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100"
                 >
                   <option value="en">English (US)</option>
+                  <option value="hi">हिन्दी (Hindi)</option>
                   <option value="de">Deutsch</option>
                   <option value="fr">Français</option>
                   <option value="es">Español</option>

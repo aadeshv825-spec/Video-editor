@@ -34,6 +34,7 @@ export interface PhotoAdjustments {
   brightness: number;   // -100 to 100
   contrast: number;     // -100 to 100
   saturation: number;   // -100 to 100
+  vibrance: number;     // -100 to 100
   temperature: number;  // -100 (cool/blue) to 100 (warm/amber)
   tint: number;         // -100 (green) to 100 (magenta)
   highlights: number;   // -100 to 100
@@ -44,6 +45,7 @@ export interface PhotoAdjustments {
   blur: number;         // 0 to 50
   vignette: number;     // 0 to 100
   grain: number;        // 0 to 100
+  filterPreset?: string;
 }
 
 export const DEFAULT_PHOTO_ADJUSTMENTS: PhotoAdjustments = {
@@ -51,6 +53,7 @@ export const DEFAULT_PHOTO_ADJUSTMENTS: PhotoAdjustments = {
   brightness: 0,
   contrast: 0,
   saturation: 0,
+  vibrance: 0,
   temperature: 0,
   tint: 0,
   highlights: 0,
@@ -61,6 +64,7 @@ export const DEFAULT_PHOTO_ADJUSTMENTS: PhotoAdjustments = {
   blur: 0,
   vignette: 0,
   grain: 0,
+  filterPreset: 'none',
 };
 
 export interface CropRect {
@@ -70,7 +74,7 @@ export interface CropRect {
   height: number;
 }
 
-export type AspectRatioPreset = 'free' | '1:1' | '4:5' | '16:9' | '9:16' | '3:2' | '2:3';
+export type AspectRatioPreset = 'free' | '1:1' | '4:5' | '16:9' | '9:16' | '3:2' | '2:3' | '4:3' | '3:4';
 
 export interface PhotoTransform {
   crop: CropRect;

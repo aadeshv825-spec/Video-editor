@@ -269,6 +269,15 @@ export const PhotoAdjustmentsPanel: React.FC<PhotoAdjustmentsPanelProps> = ({
           />
 
           <SliderRow
+            label="Vibrance"
+            value={adjustments.vibrance}
+            min={-100}
+            max={100}
+            onChange={v => updateProp('vibrance', v)}
+            onReset={() => updateProp('vibrance', 0)}
+          />
+
+          <SliderRow
             label="Temperature (Cool / Warm)"
             value={adjustments.temperature}
             min={-100}

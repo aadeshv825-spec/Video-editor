@@ -32,6 +32,8 @@ export const PhotoTransformPanel: React.FC<PhotoTransformPanelProps> = ({
     { id: '9:16', label: '9:16', desc: 'Story / Reel' },
     { id: '3:2', label: '3:2', desc: 'Classic 35mm' },
     { id: '2:3', label: '2:3', desc: 'Vertical 35mm' },
+    { id: '4:3', label: '4:3', desc: 'Classic TV / iPad' },
+    { id: '3:4', label: '3:4', desc: 'Vertical Tablet' },
   ];
 
   const handleRotate90 = (direction: 'cw' | 'ccw') => {
@@ -82,6 +84,26 @@ export const PhotoTransformPanel: React.FC<PhotoTransformPanelProps> = ({
       cropWidth = 56.25;
       cropHeight = 100;
       cropX = 21.875;
+      cropY = 0;
+    } else if (preset === '4:3') {
+      cropWidth = 100;
+      cropHeight = 75;
+      cropX = 0;
+      cropY = 12.5;
+    } else if (preset === '3:4') {
+      cropWidth = 75;
+      cropHeight = 100;
+      cropX = 12.5;
+      cropY = 0;
+    } else if (preset === '3:2') {
+      cropWidth = 100;
+      cropHeight = 66.67;
+      cropX = 0;
+      cropY = 16.66;
+    } else if (preset === '2:3') {
+      cropWidth = 66.67;
+      cropHeight = 100;
+      cropX = 16.66;
       cropY = 0;
     }
 
