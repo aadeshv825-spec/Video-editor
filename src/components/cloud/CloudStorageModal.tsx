@@ -13,7 +13,8 @@ import {
   Database,
   Sparkles,
   AlertTriangle,
-  Flame
+  Flame,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { BackupService } from '../../services/backup/backupService';
@@ -425,9 +426,28 @@ export const CloudStorageModal: React.FC<CloudStorageModalProps> = ({
           </div>
         </div>
 
+        {/* Infrastructure Status Banner */}
+        <div className="p-3 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/40 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-neutral-600 dark:text-neutral-400">
+            <Database className="w-4 h-4 text-neutral-500" />
+            <span className="text-[11px]">
+              Local storage is active. Centralized Multi-Device Database & Cloud Object Storage are <strong>SETUP_REQUIRED</strong>.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => BackupService.downloadWorkspaceExport()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-300 dark:hover:bg-neutral-700 font-semibold text-[11px] whitespace-nowrap transition-colors"
+            title="Download complete JSON archive of all projects, settings, and revision history"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Archive (.json)</span>
+          </button>
+        </div>
+
         {/* Footer */}
         <div className="flex justify-between items-center pt-2 border-t border-neutral-100 dark:border-neutral-800">
-          {!isPro && onOpenPro && (
+          {!isPro && onOpenPro ? (
             <button
               onClick={() => {
                 onClose();
@@ -437,6 +457,10 @@ export const CloudStorageModal: React.FC<CloudStorageModalProps> = ({
             >
               Need 100 GB vault storage? Upgrade to Pro →
             </button>
+          ) : (
+            <div className="text-[11px] text-neutral-500">
+              {isPro ? 'Pro Tier Vault: 100 GB Quota Active' : 'Starter Tier Vault: 15 GB Quota'}
+            </div>
           )}
           <div className="ml-auto">
             <button

@@ -1,0 +1,160 @@
+{
+  "system": "VYRO AI Studio Enterprise",
+  "version": "1.0.0",
+  "platform": "Firebase Firestore Cloud Architecture",
+  "collections": {
+    "users": {
+      "description": "User profile, role, Pro status, AI credits, and account metadata",
+      "fields": {
+        "id": "string (UID)",
+        "email": "string",
+        "name": "string",
+        "role": "string ('owner' | 'admin' | 'creator' | 'user')",
+        "status": "string ('active' | 'suspended')",
+        "isPro": "boolean (authoritative)",
+        "proSource": "string ('subscription' | 'owner_grant' | 'trial')",
+        "proExpiresAt": "timestamp | null",
+        "aiCredits": "number (authoritative)",
+        "betaAccess": "boolean",
+        "createdAt": "timestamp",
+        "lastActiveAt": "timestamp"
+      },
+      "subcollections": {
+        "privateAuth": {
+          "description": "Sensitive credentials, never readable by client",
+          "rules": "allow read, write: if false; // Server Admin SDK only"
+        },
+        "devices": {
+          "description": "Connected client devices for multi-device sync",
+          "fields": {
+            "deviceId": "string",
+            "name": "string",
+            "platform": "string",
+            "lastActiveAt": "timestamp",
+            "isCurrent": "boolean"
+          }
+        }
+      }
+    },
+    "projects": {
+      "description": "User project documents with versioning and sync metadata",
+      "fields": {
+        "id": "string",
+        "ownerId": "string (matches request.auth.uid)",
+        "title": "string",
+        "type": "string ('video' | 'photo' | 'audio' | 'director' | 'tools' | 'generate' | 'templates')",
+        "aspectRatio": "string",
+        "resolution": "string",
+        "fps": "number",
+        "projectVersion": "number (monotonic sequence)",
+        "revisionId": "string (UUID)",
+        "deviceId": "string",
+        "syncStatus": "string ('synced' | 'local_only' | 'pending' | 'conflict')",
+        "isDeleted": "boolean",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp",
+        "autosavedAt": "timestamp",
+        "cloudSyncedAt": "timestamp",
+        "stateData": "map (project canvas/timeline payload)",
+        "exportSettings": "map"
+      },
+      "subcollections": {
+        "versions": {
+          "description": "Non-destructive snapshots and revision history",
+          "fields": {
+            "versionNumber": "number",
+            "title": "string",
+            "notes": "string",
+            "actionCount": "number",
+            "previewUrl": "string",
+            "snapshotPayload": "map",
+            "createdAt": "timestamp"
+          }
+        }
+      }
+    },
+    "mediaAssets": {
+      "description": "Media asset metadata with owner isolation and storage references",
+      "fields": {
+        "id": "string",
+        "ownerId": "string (matches request.auth.uid)",
+        "projectId": "string | null",
+        "name": "string",
+        "type": "string ('video' | 'audio' | 'image')",
+        "sizeBytes": "number",
+        "durationSec": "number | null",
+        "dimensions": "string | null",
+        "storageProvider": "string ('gcs' | 's3' | 'local')",
+        "storageBucket": "string",
+        "storageKey": "string",
+        "mimeType": "string",
+        "status": "string ('uploading' | 'ready' | 'trashed' | 'purged')",
+        "trashedAt": "timestamp | null",
+        "purgeScheduledAt": "timestamp | null",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp"
+      }
+    },
+    "subscriptions": {
+      "description": "Server-authoritative subscriptions & payment verification records",
+      "fields": {
+        "id": "string",
+        "userId": "string",
+        "planId": "string",
+        "status": "string ('active' | 'trialing' | 'past_due' | 'canceled' | 'expired')",
+        "startDate": "timestamp",
+        "expiryDate": "timestamp",
+        "isTrial": "boolean",
+        "gateway": "string ('razorpay' | 'stripe' | 'google_play' | 'app_store' | 'not_configured')",
+        "gatewayOrderId": "string | null",
+        "gatewayPaymentId": "string | null",
+        "amount": "number",
+        "currency": "string",
+        "autoRenew": "boolean",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp"
+      }
+    },
+    "creditTransactions": {
+      "description": "Immutable balance ledger entries",
+      "fields": {
+        "id": "string",
+        "userId": "string",
+        "type": "string",
+        "reason": "string",
+        "creditsAdded": "number",
+        "creditsConsumed": "number",
+        "balanceAfter": "number",
+        "relatedJobId": "string | null",
+        "modelProvider": "string | null",
+        "timestamp": "timestamp"
+      }
+    },
+    "backups": {
+      "description": "Full project and settings point-in-time recovery archives",
+      "fields": {
+        "id": "string",
+        "userId": "string",
+        "title": "string",
+        "backupType": "string ('auto' | 'manual')",
+        "projectCount": "number",
+        "sizeBytes": "number",
+        "metadataPayload": "map",
+        "createdAt": "timestamp"
+      }
+    },
+    "auditLogs": {
+      "description": "Cryptographically signed owner and administrative audit stream",
+      "fields": {
+        "id": "string",
+        "actorId": "string",
+        "actorName": "string",
+        "actorRole": "string",
+        "action": "string",
+        "targetUserId": "string | null",
+        "details": "string",
+        "timestamp": "timestamp"
+      }
+    }
+  }
+}

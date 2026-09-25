@@ -74,7 +74,93 @@ export class BackupService {
     return DEFAULT_STORAGE_USAGE;
   }
 
-  public static emptyTrash(isPro: boolean = false): CloudStorageUsage {
+  /**
+   * Fetch authoritative server quota usage
+   */
+  public static async fetchServerQuota(userId?: string): Promise<CloudStorageUsage | null> {
+    try {
+      const res = await fetch('/api/media/quota', {
+        headers: {
+          'x-user-id': userId || 'usr-creator-02',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.quota) {
+          localStorage.setItem(STORAGE_STATS_KEY, JSON.stringify(data.quota));
+          window.dispatchEvent(new CustomEvent('storage-stats-updated', { detail: data.quota }));
+          return data.quota;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch server quota, using local tracking', e);
+    }
+    return null;
+  }
+
+  /**
+   * Creates a point-in-time backup snapshot on the server
+   */
+  public static async createServerBackup(
+    title: string,
+    projects: any[],
+    settings: any,
+    userId?: string
+  ): Promise<{ success: boolean; backupId?: string }> {
+    try {
+      const res = await fetch('/api/backup/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId || 'usr-creator-02',
+        },
+        body: JSON.stringify({
+          title,
+          backupType: 'manual',
+          projectsPayload: projects,
+          settingsPayload: settings,
+        }),
+      });
+      if (!res.ok) return { success: false };
+      const data = await res.json();
+      return { success: true, backupId: data.backupId };
+    } catch {
+      return { success: false };
+    }
+  }
+
+  /**
+   * Download safe offline workspace export JSON
+   */
+  public static async downloadWorkspaceExport(userId?: string): Promise<void> {
+    try {
+      const res = await fetch('/api/backup/export', {
+        headers: {
+          'x-user-id': userId || 'usr-creator-02',
+        },
+      });
+      if (!res.ok) throw new Error('Export request failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vyro_studio_backup_${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Workspace export download error:', e);
+    }
+  }
+
+  public static emptyTrash(isPro: boolean = false, userId?: string): CloudStorageUsage {
+    // Call server purge
+    fetch('/api/media/trash/empty', {
+      method: 'POST',
+      headers: { 'x-user-id': userId || 'usr-creator-02' },
+    }).catch(() => {});
+
     const usage = this.getStorageUsage(isPro);
     usage.usedTrashBytes = 0;
     localStorage.setItem(STORAGE_STATS_KEY, JSON.stringify(usage));

@@ -1,7 +1,10 @@
+import bcrypt from 'bcryptjs';
+
 /**
  * VYRO Creative Studio - Enterprise Security & Cryptographic Service
- * Provides salted SHA-256 hashing, password strength evaluation,
- * rate-limiting protection, email verification, and security audit tracking.
+ * Provides dedicated bcrypt password KDF (work factor 10), legacy SHA-256 migration,
+ * password strength evaluation, rate-limiting protection, email verification,
+ * and security audit tracking.
  */
 
 export interface PasswordStrengthResult {
@@ -44,9 +47,9 @@ const LOCKOUT_DURATION_MS = 60 * 1000; // 1 minute lockout
 
 export class SecurityService {
   /**
-   * Generates a cryptographically strong random salt
+   * Generates cryptographically secure random hexadecimal characters
    */
-  static generateSalt(length = 16): string {
+  static generateRandomHex(length = 16): string {
     const array = new Uint8Array(length);
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
       crypto.getRandomValues(array);
@@ -59,34 +62,99 @@ export class SecurityService {
   }
 
   /**
-   * Hashes password using SHA-256 with a unique cryptographic salt
-   * Uses Web Crypto API when available with synchronous fallback
+   * Generates a cryptographically secure bcrypt salt with standard work factor 10
    */
-  static async hashPassword(password: string, salt: string): Promise<string> {
+  static generateSalt(rounds = 10): string {
+    try {
+      return bcrypt.genSaltSync(rounds);
+    } catch {
+      return this.generateRandomHex(16);
+    }
+  }
+
+  /**
+   * Checks whether a hash string is a standard bcrypt hash ($2a$, $2b$, or $2y$)
+   */
+  static isBcryptHash(hash?: string): boolean {
+    if (!hash || typeof hash !== 'string') return false;
+    return hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$');
+  }
+
+  /**
+   * Determines if a stored password hash needs migration to the modern bcrypt KDF
+   */
+  static needsRehash(hash?: string): boolean {
+    if (!hash) return true;
+    return !this.isBcryptHash(hash);
+  }
+
+  /**
+   * Hashes a password using the dedicated bcrypt password KDF (work factor 10)
+   */
+  static async hashPassword(password: string, saltOrRounds?: string | number): Promise<string> {
+    if (typeof saltOrRounds === 'string' && this.isBcryptHash(saltOrRounds)) {
+      return bcrypt.hash(password, saltOrRounds);
+    }
+    const rounds = typeof saltOrRounds === 'number' ? saltOrRounds : 10;
+    return bcrypt.hash(password, rounds);
+  }
+
+  /**
+   * Verifies password against legacy salted SHA-256 for backward compatibility.
+   * Strictly used for seamless transparent migration of pre-existing accounts.
+   */
+  static async verifyLegacySha256(password: string, hash: string, salt: string): Promise<boolean> {
     const combined = `${salt}:${password}:vyro_studio_secure_salt_v2`;
     if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
       const encoder = new TextEncoder();
       const data = encoder.encode(combined);
       const hashBuffer = await crypto.subtle.digest('SHA-256', data);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      const computed = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return computed === hash;
     }
     
     // Deterministic fallback hash for environments without crypto.subtle
-    let hash = 0x811c9dc5;
+    let fallback = 0x811c9dc5;
     for (let i = 0; i < combined.length; i++) {
-      hash ^= combined.charCodeAt(i);
-      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+      fallback ^= combined.charCodeAt(i);
+      fallback += (fallback << 1) + (fallback << 4) + (fallback << 7) + (fallback << 8) + (fallback << 24);
     }
-    return (hash >>> 0).toString(16).padStart(64, '0');
+    return (fallback >>> 0).toString(16).padStart(64, '0') === hash;
+  }
+
+  /**
+   * Verifies an input password against stored hash and salt,
+   * returning whether the credentials match and whether a KDF rehash is needed.
+   */
+  static async verifyPasswordDetails(
+    password: string,
+    hash: string,
+    salt?: string
+  ): Promise<{ isValid: boolean; needsRehash: boolean }> {
+    if (this.isBcryptHash(hash)) {
+      const isValid = await bcrypt.compare(password, hash);
+      return { isValid, needsRehash: false };
+    }
+
+    // Backward-compatibility: Check legacy salted SHA-256
+    if (salt) {
+      const isValidLegacy = await this.verifyLegacySha256(password, hash, salt);
+      if (isValidLegacy) {
+        return { isValid: true, needsRehash: true };
+      }
+    }
+
+    return { isValid: false, needsRehash: false };
   }
 
   /**
    * Verifies an input password against stored hash and salt
+   * Supports both modern bcrypt KDF and legacy salted SHA-256
    */
-  static async verifyPassword(password: string, hash: string, salt: string): Promise<boolean> {
-    const computed = await this.hashPassword(password, salt);
-    return computed === hash;
+  static async verifyPassword(password: string, hash: string, salt?: string): Promise<boolean> {
+    const result = await this.verifyPasswordDetails(password, hash, salt);
+    return result.isValid;
   }
 
   /**
@@ -192,7 +260,7 @@ export class SecurityService {
    * Generates a secure random token
    */
   static generateToken(): string {
-    return 'vyr_' + this.generateSalt(24);
+    return 'vyr_' + this.generateRandomHex(24);
   }
 
   /**

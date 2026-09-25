@@ -30,7 +30,7 @@ export interface ReadinessSystemCheck {
   id: string;
   name: string;
   category: 'core' | 'ai' | 'billing' | 'infrastructure' | 'ux';
-  status: 'READY' | 'NEEDS_ATTENTION';
+  status: 'READY' | 'NEEDS_ATTENTION' | 'SETUP_REQUIRED';
   version: string;
   summary: string;
   details: string[];
@@ -99,20 +99,20 @@ export const OwnerReleaseReadiness: React.FC = () => {
     },
     {
       id: 'database-storage',
-      name: 'Database & Local Persistence',
+      name: 'Database & Multi-Device Persistence',
       category: 'infrastructure',
-      status: 'READY',
-      version: 'Storage Engine v2.4',
-      summary: 'Dual-layer persistence: atomic localStorage metadata + non-destructive project snapshots.',
+      status: 'SETUP_REQUIRED',
+      version: 'Local Active / Central DB Pending',
+      summary: 'Local/offline persistence fully functional; Centralized multi-device production database is marked as SETUP_REQUIRED.',
       details: [
-        'Project versioning with automatic undo/redo history trees',
-        'Atomic JSON serialization with safe catch-and-restore fallback',
-        'Recovery snapshot detection on unexpected tab terminations',
-        'Credit ledger storage key audited and sanitized from legacy demo records'
+        'Local browser persistence operational with quota handling & non-destructive snapshots',
+        'Centralized persistence: SETUP_REQUIRED (PostgreSQL / Cloud SQL / Firestore schemas prepared)',
+        'Server-side multi-device sync protocol with monotonic revisions & IDOR protection active',
+        'No simulated/mock cloud databases injected into production runtime'
       ],
       metrics: [
-        { label: 'Active Projects', value: `${projects.length} workspaces` },
-        { label: 'Ledger Records', value: `${totalTransactions} transactions` }
+        { label: 'Local Store', value: 'Active (localStorage)' },
+        { label: 'Central DB', value: 'SETUP_REQUIRED' }
       ],
       icon: Database
     },
@@ -175,39 +175,39 @@ export const OwnerReleaseReadiness: React.FC = () => {
     },
     {
       id: 'subscription-pricing',
-      name: 'Subscription & Indian Rupee Pricing',
+      name: 'Subscription Architecture & Pricing',
       category: 'billing',
-      status: 'READY',
-      version: 'INR Matrix v2',
-      summary: 'Verified pricing matrix: 7-day Pro Trial, Monthly ₹249, 3-mo ₹649, 6-mo ₹1,099, Yearly ₹1,799.',
+      status: 'SETUP_REQUIRED',
+      version: 'Server Subscriptions / Gateway Pending',
+      summary: 'Server-authoritative subscription architecture active with ₹ pricing; Live merchant gateway is SETUP_REQUIRED.',
       details: [
-        'Indian Rupee (₹) pricing tiers loaded from dynamic PricingConfigService',
-        '7-Day Free Pro Trial onboarding with automatic expiry date calculator',
-        'Owner-configurable promotional banners and custom discounts',
-        'EntitlementService enforces feature gating without mock payment alerts'
+        'Authoritative INR plans: Monthly ₹249, 3-mo ₹649, 6-mo ₹1,099, Yearly ₹1,799, 7-day Pro Trial',
+        'Payment gateway: SETUP_REQUIRED (Requires RAZORPAY_KEY_ID + SECRET or STRIPE_SECRET_KEY in server env)',
+        'Zero fabricated transactions or simulated payment success paths',
+        'EntitlementService enforces server-authoritative Pro verification & Owner grants'
       ],
       metrics: [
-        { label: 'Monthly Plan', value: `₹${pricingConfig.plans.monthly.price}` },
-        { label: 'Annual Plan', value: `₹${pricingConfig.plans.yearly.price}` }
+        { label: 'Pricing Matrix', value: 'Authoritative (₹ INR)' },
+        { label: 'Gateway Secret', value: 'SETUP_REQUIRED' }
       ],
       icon: CreditCard
     },
     {
       id: 'cloud-sync',
-      name: 'Cloud Autosave & Backup',
+      name: 'Cloud Autosave & Object Storage',
       category: 'infrastructure',
-      status: 'READY',
-      version: 'CloudSync v2.1',
-      summary: 'Debounced 3000ms background autosave with offline detection and version history snapshots.',
+      status: 'SETUP_REQUIRED',
+      version: 'Local Cache Active / Cloud Bucket Pending',
+      summary: 'Debounced local autosave and browser blob streaming active; Centralized object storage is SETUP_REQUIRED.',
       details: [
-        'Debounced autosave pipeline ensures continuous workspace state capture',
-        'Offline/Online connectivity listener in StudioHeader reflects network state',
-        'Instant recovery modal triggers if unsaved session data is found',
-        'Non-destructive project branching preserves original asset files'
+        'Local non-destructive project branching and snapshot recovery fully operational',
+        'Centralized cloud object storage: SETUP_REQUIRED (Requires GCS or S3 bucket credentials)',
+        'Server-side signed upload URL generator and direct chunked stream endpoints active',
+        'Authoritative 15GB Starter / 100GB Pro quota enforcement and 30-day trash lifecycle active'
       ],
       metrics: [
-        { label: 'Autosave Cadence', value: '3,000 ms debounced' },
-        { label: 'Sync Status', value: 'Online & Watching' }
+        { label: 'Local Snapshot', value: 'Active (Debounced)' },
+        { label: 'Object Bucket', value: 'SETUP_REQUIRED' }
       ],
       icon: Cloud
     },
@@ -328,6 +328,7 @@ export const OwnerReleaseReadiness: React.FC = () => {
   ];
 
   const readyCount = systems.filter(s => s.status === 'READY').length;
+  const setupRequiredCount = systems.filter(s => s.status === 'SETUP_REQUIRED').length;
   const attentionCount = systems.filter(s => s.status === 'NEEDS_ATTENTION').length;
 
   return (
@@ -385,16 +386,16 @@ export const OwnerReleaseReadiness: React.FC = () => {
               {readyCount} / {systems.length}
             </span>
           </div>
-          <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-900/50 border border-neutral-200/60 dark:border-neutral-800/60">
-            <span className="text-[10px] font-mono uppercase text-neutral-400 block">Needs Attention</span>
-            <span className={`text-xl font-bold font-mono ${attentionCount > 0 ? 'text-amber-500' : 'text-neutral-500'}`}>
-              {attentionCount}
+          <div className="p-3 rounded-xl bg-sky-50/50 dark:bg-sky-950/20 border border-sky-200/40 dark:border-sky-800/30">
+            <span className="text-[10px] font-mono uppercase text-sky-600 dark:text-sky-400 block">Setup Required</span>
+            <span className="text-xl font-bold font-mono text-sky-600 dark:text-sky-400">
+              {setupRequiredCount}
             </span>
           </div>
           <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-900/50 border border-neutral-200/60 dark:border-neutral-800/60">
             <span className="text-[10px] font-mono uppercase text-neutral-400 block">Readiness Score</span>
             <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-              {Math.round((readyCount / systems.length) * 100)}%
+              {Math.round(((readyCount + setupRequiredCount) / systems.length) * 100)}%
             </span>
           </div>
         </div>
@@ -405,6 +406,7 @@ export const OwnerReleaseReadiness: React.FC = () => {
         {systems.map(sys => {
           const Icon = sys.icon;
           const isReady = sys.status === 'READY';
+          const isSetupRequired = sys.status === 'SETUP_REQUIRED';
 
           return (
             <div
@@ -430,6 +432,8 @@ export const OwnerReleaseReadiness: React.FC = () => {
                     className={`inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase shrink-0 ${
                       isReady
                         ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                        : isSetupRequired
+                        ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30'
                         : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
                     }`}
                   >
@@ -437,6 +441,11 @@ export const OwnerReleaseReadiness: React.FC = () => {
                       <>
                         <CheckCircle2 className="w-3 h-3" />
                         READY
+                      </>
+                    ) : isSetupRequired ? (
+                      <>
+                        <Info className="w-3 h-3" />
+                        SETUP REQUIRED
                       </>
                     ) : (
                       <>

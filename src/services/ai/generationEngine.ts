@@ -7,6 +7,10 @@ import {
   VideoGenerationParams,
 } from '../../types/aiGeneration';
 import { ExtendedAIModel, ModelRegistryService } from './modelRegistry';
+import { ProviderCostLedgerService } from './providerCostLedgerService';
+import { ProviderCostSafetyService } from './providerCostSafetyService';
+import { CapabilityFallbackService } from './capabilityFallbackService';
+import { CreditLedgerService } from '../credits/creditLedgerService';
 
 const HISTORY_STORAGE_KEY = 'ai_creative_studio_gen_history_v1';
 const REF_SETS_STORAGE_KEY = 'ai_creative_studio_ref_sets_v1';
@@ -120,13 +124,28 @@ export class GenerationEngine {
     localStorage.removeItem(HISTORY_STORAGE_KEY);
   }
 
-  // ==================== AUTO MODEL ROUTER (USER REQUEST #20) ====================
+  // ==================== AUTO MODEL ROUTER & CAPABILITY ROUTER ====================
   static resolveModel(criteria: AutoRouteCriteria): ExtendedAIModel {
     const allModels = ModelRegistryService.getAllModels();
+    const limits = ProviderCostSafetyService.getLimits();
 
     if (criteria.preference === 'MANUAL' && criteria.manualModelId) {
       const manual = ModelRegistryService.getModelById(criteria.manualModelId);
-      if (manual) return manual;
+      // Check if disabled by owner
+      if (manual && !limits.disabledModels[manual.id]) {
+        // If not configured, check capability fallback
+        const configCheck = ModelRegistryService.isModelConfigured(manual.id);
+        if (!configCheck.configured && limits.autoFallbackEnabled) {
+          const fallback = CapabilityFallbackService.resolveFallback(manual.id, criteria.taskType);
+          // STRICT RULE: Automatic fallback is ONLY allowed for TRUE_EQUIVALENT.
+          // PARTIAL_ALTERNATIVE and NO_EQUIVALENT MUST NOT be silently substituted!
+          if (fallback.canFallback && fallback.accuracy === 'TRUE_EQUIVALENT' && fallback.targetModelId) {
+            const fbModel = ModelRegistryService.getModelById(fallback.targetModelId);
+            if (fbModel && !limits.disabledModels[fbModel.id]) return fbModel;
+          }
+        }
+        return manual;
+      }
     }
 
     // Determine category based on taskType
@@ -135,12 +154,17 @@ export class GenerationEngine {
     else if (criteria.taskType === 'tts_speech') category = 'SPEECH';
     else if (criteria.taskType === 'sound_effect' || criteria.taskType === 'music_generation') category = 'AUDIO';
 
-    const candidates = allModels.filter(m => m.category === category);
+    // Filter out models disabled by Owner
+    const activeModels = allModels.filter(m => !limits.disabledModels[m.id]);
+    const candidates = activeModels.filter(m => m.category === category);
     if (candidates.length === 0) return allModels[0];
 
-    // Priority filter by configured provider first
-    const onlineAndConfigured = candidates.filter(m => m.apiConfigured && m.availability === 'online');
-    const pool = onlineAndConfigured.length > 0 ? onlineAndConfigured : candidates;
+    // AUTO router ONLY selects executable models (online, not disabled, and provider configured)
+    const executableCandidates = candidates.filter(
+      m => m.availability === 'online' && ModelRegistryService.isModelConfigured(m.id).configured
+    );
+    const pool = executableCandidates.length > 0 ? executableCandidates : candidates.filter(m => m.availability === 'online');
+    if (pool.length === 0) return allModels[0];
 
     if (criteria.preference === 'FAST') {
       const fast = pool.find(m => m.speed === 'fast');
@@ -520,6 +544,7 @@ export class GenerationEngine {
 
   // ==================== MAIN EXECUTE GENERATION PIPELINE ====================
   static async executeGeneration(params: {
+    jobId?: string;
     taskType: GenerationTaskType;
     prompt: string;
     modelId: string;
@@ -528,8 +553,16 @@ export class GenerationEngine {
     audioParams?: Partial<AudioGenerationParams>;
     projectId?: string;
     projectTitle?: string;
+    userId?: string;
+    userCreditBalance?: number;
+    isOwner?: boolean;
     onProgress?: (percent: number, statusText: string) => void;
   }): Promise<{ success: boolean; record?: GenerationRecord; error?: string; suggestedFallbackId?: string }> {
+    const requestId = params.jobId || `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const executionJobId = requestId;
+    const effectiveUserId = params.userId || 'usr-active-creator';
+    const effectiveCreditBalance = params.userCreditBalance ?? 5000;
+
     // 1. Offline Protection Check (User Request #28)
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return {
@@ -549,6 +582,74 @@ export class GenerationEngine {
     }
 
     const model = ModelRegistryService.getModelById(params.modelId)!;
+    const durationSec = params.videoParams?.durationSec || params.audioParams?.sfxDurationSec || 5;
+    const resolution = params.videoParams?.resolution || params.imageParams?.resolution || '1080p';
+
+    // 3. Preflight Cost & Safety Check (Cost Protection, Concurrency & Spend Ceilings)
+    const safetyCheck = ProviderCostSafetyService.preflightSafetyCheck({
+      userId: effectiveUserId,
+      modelId: model.id,
+      provider: model.providerType,
+      durationSec,
+      resolution,
+      vyroCreditsRequired: model.costPerUnit,
+      userCreditBalance: effectiveCreditBalance,
+      isOwner: params.isOwner,
+    });
+
+    if (!safetyCheck.allowed) {
+      ProviderCostLedgerService.recordLimitBlocked({
+        requestId,
+        provider: model.providerType,
+        model: model.id,
+        operation: params.taskType,
+        userId: effectiveUserId,
+        estimatedCostUsd: safetyCheck.estimatedCostUsd,
+        reason: safetyCheck.adminReason || 'Safety limit reached',
+      });
+
+      return {
+        success: false,
+        error: safetyCheck.userSafeMessage || 'AI generation is temporarily unavailable because the configured usage limit has been reached.',
+      };
+    }
+
+    // 4. ATOMIC VYRO CREDITS RESERVATION BEFORE DISPATCH
+    // Ensures:
+    // - Credits are atomically reserved before dispatching external worker
+    // - Multiple concurrent requests cannot spend the same credits
+    // - Insufficient available credits (balance - in-flight reserved) blocks execution
+    // - Idempotency: same jobId cannot reserve twice
+    const creditRes = CreditLedgerService.reserveCredits({
+      jobId: executionJobId,
+      userId: effectiveUserId,
+      amount: model.costPerUnit,
+      reason: `AI Generation: ${params.prompt.length > 40 ? params.prompt.slice(0, 37) + '...' : params.prompt}`,
+      modelOrProvider: `${model.provider} (${model.name})`,
+      userTotalBalance: effectiveCreditBalance,
+    });
+
+    if (!creditRes.success) {
+      return {
+        success: false,
+        error: creditRes.error || 'Insufficient available AI credits to start this generation.',
+      };
+    }
+
+    // 5. Reserve Provider Cost in Internal Ledger
+    ProviderCostLedgerService.recordReservation({
+      requestId,
+      provider: model.providerType,
+      model: model.id,
+      operation: params.taskType,
+      userId: effectiveUserId,
+      projectId: params.projectId,
+      estimatedCostUsd: safetyCheck.estimatedCostUsd,
+      vyroCredits: model.costPerUnit,
+      durationSec,
+      resolution,
+    });
+
     const updateProgress = (p: number, s: string) => {
       params.onProgress?.(p, s);
     };
@@ -563,10 +664,8 @@ export class GenerationEngine {
       let outputUrl = '';
       let outputUrls: string[] | undefined;
       let outputType: 'video' | 'image' | 'audio' = 'video';
-      let durationSec = 5;
-      let resolution = '1080p';
 
-      // 3. Dispatch specific generation worker
+      // 5. Dispatch specific generation worker
       if (params.taskType.includes('image')) {
         outputType = 'image';
         updateProgress(65, 'Rendering diffusion latent noise tensors...');
@@ -602,7 +701,6 @@ export class GenerationEngine {
           pitch: audioP.speechPitch,
         });
         outputUrl = ttsResult.audioUrl;
-        durationSec = ttsResult.durationSec;
       } else if (params.taskType === 'sound_effect' || params.taskType === 'music_generation') {
         outputType = 'audio';
         updateProgress(65, 'Synthesizing spatial acoustic stereo stems...');
@@ -612,14 +710,11 @@ export class GenerationEngine {
           durationSec: audioP.sfxDurationSec || audioP.musicDurationSec || 4,
           intensity: audioP.sfxIntensity,
         });
-        durationSec = audioP.sfxDurationSec || audioP.musicDurationSec || 4;
       } else {
         // Video Generation
         outputType = 'video';
         updateProgress(60, 'Compositing frame interpolation and camera dolly...');
         const vidP = params.videoParams || {};
-        durationSec = vidP.durationSec || 5;
-        resolution = vidP.resolution || '1080p';
         outputUrl = await this.renderCinematicVideoBlob({
           prompt: params.prompt,
           aspectRatio: vidP.aspectRatio || '16:9',
@@ -661,13 +756,60 @@ export class GenerationEngine {
         },
       };
 
+      // 6. Settle VYRO Credits Reservation Exactly Once
+      CreditLedgerService.settleReservation({
+        jobId: executionJobId,
+        userId: effectiveUserId,
+        actualAmount: model.costPerUnit,
+        reason: `AI Studio Generation: ${record.title}`,
+        modelOrProvider: `${record.provider} (${record.modelName})`,
+        currentBalance: effectiveCreditBalance,
+      });
+
+      // 7. Record Completion in Internal Provider Ledger
+      ProviderCostLedgerService.recordCompletion({
+        requestId,
+        providerJobId: `pjob-${record.id}`,
+        actualCostUsd: safetyCheck.estimatedCostUsd,
+      });
+
+      // Best-effort sync to server ledger
+      fetch('/api/ai/safety/ledger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId,
+          provider: model.providerType,
+          model: model.id,
+          operation: params.taskType,
+          userId: effectiveUserId,
+          estimatedProviderCostUsd: safetyCheck.estimatedCostUsd,
+          actualProviderCostUsd: safetyCheck.estimatedCostUsd,
+          vyroCreditsCharged: model.costPerUnit,
+          status: 'completed',
+        }),
+      }).catch(() => {});
+
       this.saveRecord(record);
       return { success: true, record };
     } catch (err: any) {
       console.error('Generation failure', err);
+      // Release VYRO Credits Reservation Immediately (no locked credits)
+      CreditLedgerService.releaseReservation({
+        jobId: executionJobId,
+        reason: err.message || 'Generation pipeline failed',
+      });
+
+      // Record failure and auto-refund in Provider Cost Ledger
+      ProviderCostLedgerService.recordFailure({
+        requestId,
+        reason: err.message || 'Generation pipeline failed',
+        refundCredits: true,
+      });
+
       return {
         success: false,
-        error: err.message || 'Generation pipeline failed. Credits were not deducted.',
+        error: err.message || 'Generation pipeline failed. Reserved credits were safely released back to your balance.',
       };
     }
   }

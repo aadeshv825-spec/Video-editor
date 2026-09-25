@@ -162,3 +162,12 @@ export interface ModelHubItem extends AIModel {
   features?: string[];
   releaseDate?: string;
 }
+
+export interface AutoRouteCriteria {
+  taskType: GenerationTaskType;
+  preference?: 'AUTO' | 'FAST' | 'BALANCED' | 'QUALITY' | 'MANUAL';
+  targetDuration?: number;
+  targetResolution?: string;
+  manualModelId?: string;
+}
+

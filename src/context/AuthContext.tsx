@@ -5,6 +5,8 @@ import { EntitlementService } from '../services/entitlement/entitlementService';
 import { CreditLedgerService } from '../services/credits/creditLedgerService';
 import { AuditLogService } from '../services/owner/auditLogService';
 import { SecurityService } from '../services/auth/securityService';
+import { OwnerSecurityService } from '../services/owner/ownerSecurityService';
+import { PaymentService } from '../services/payment/paymentService';
 
 interface AuthContextType {
   currentUser: User;
@@ -111,10 +113,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUserId]);
 
+  // Keep in-memory users state synchronized with CreditLedgerService settlements
+  useEffect(() => {
+    const handleReservationUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail.status === 'settled' && detail.userId && typeof detail.amount === 'number') {
+        setUsers(prev =>
+          prev.map(u => (u.id === detail.userId ? { ...u, aiCredits: Math.max(0, u.aiCredits - detail.amount) } : u))
+        );
+      }
+    };
+
+    window.addEventListener('credit-reservation-updated', handleReservationUpdate);
+    return () => window.removeEventListener('credit-reservation-updated', handleReservationUpdate);
+  }, []);
+
   const currentUser = users.find(u => u.id === currentUserId) || users[0];
 
   const isOwner = currentUser.role === 'owner';
   const isAdmin = currentUser.role === 'owner' || currentUser.role === 'admin';
+
+  // Synchronize server-side Owner Session with active persona/user
+  useEffect(() => {
+    if (currentUser && currentUser.role === 'owner') {
+      OwnerSecurityService.acquireOwnerSession(currentUser);
+    } else {
+      OwnerSecurityService.setOwnerToken(null);
+    }
+  }, [currentUser]);
 
   // Calculate Pro status with entitlement service
   const isPro = EntitlementService.isProActive(currentUser);
@@ -166,12 +192,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Password verification if password exists
-    if (found.passwordHash && found.passwordSalt) {
+    let updatedHash = found.passwordHash;
+    let updatedSalt = found.passwordSalt;
+
+    if (found.passwordHash) {
       if (!pass) {
         return { success: false, error: 'Password is required to sign in.' };
       }
-      const isValid = await SecurityService.verifyPassword(pass, found.passwordHash, found.passwordSalt);
-      if (!isValid) {
+      const verifyResult = await SecurityService.verifyPasswordDetails(pass, found.passwordHash, found.passwordSalt);
+      if (!verifyResult.isValid) {
         const attempt = SecurityService.recordFailedAttempt(trimmedEmail);
         if (attempt.isLocked) {
           return {
@@ -183,6 +212,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           success: false,
           error: `Incorrect password. ${attempt.remainingAttempts} attempt(s) remaining before lockout.`,
         };
+      }
+
+      // Safe transparent migration to bcrypt KDF if legacy hash was used
+      if (verifyResult.needsRehash) {
+        const newSalt = SecurityService.generateSalt();
+        updatedHash = await SecurityService.hashPassword(pass, newSalt);
+        updatedSalt = newSalt;
       }
     }
 
@@ -196,6 +232,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (u.id === found.id) {
           return {
             ...u,
+            passwordHash: updatedHash,
+            passwordSalt: updatedSalt,
             lastActiveAt: 'Just now',
             securityEvents: [secEvent, ...(u.securityEvents || [])].slice(0, 30),
           };
@@ -554,7 +592,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return {
       success: true,
       verificationCode: code,
-      message: `Verification code (${code}) sent to ${currentUser.email}.`,
+      message: `A verification code has been dispatched to ${currentUser.email}.`,
     };
   };
 
@@ -565,20 +603,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const restorePurchase = async (): Promise<{ restored: boolean; message: string }> => {
-    await new Promise(r => setTimeout(r, 800));
-    if (currentUser.isPro) {
+    try {
+      const serverResult = await PaymentService.getUserSubscription(currentUser.id);
+      if (serverResult.isPro && serverResult.subscription) {
+        setUsers(prev =>
+          prev.map(u => {
+            if (u.id === currentUser.id) {
+              return {
+                ...u,
+                isPro: true,
+                proSource: 'subscription',
+                proExpiresAt: serverResult.subscription?.expiryDate,
+              };
+            }
+            return u;
+          })
+        );
+        return {
+          restored: true,
+          message: `Active subscription verified from billing server (${serverResult.subscription.planId}). Entitlements refreshed until ${new Date(serverResult.subscription.expiryDate).toLocaleDateString()}.`,
+        };
+      }
+    } catch {
+      // safe fallback
+    }
+
+    if (currentUser.role === 'owner' || currentUser.proSource === 'owner_grant') {
       return {
         restored: true,
-        message: `Active subscription verified (${currentUser.proSource || 'Pro Plan'}). Entitlements refreshed.`,
+        message: 'Owner platform grant verified. Permanent Pro entitlements active.',
       };
     }
+
     return {
       restored: false,
-      message: 'No previous purchases found for this email account on the active billing gateway.',
+      message: 'No active subscription found on billing server for this account email.',
     };
   };
 
-  // Owner methods
+  // Owner methods (Protected by client role + Server authorization)
   const ownerGrantPro = (
     userId: string,
     durationDays: number | null,
@@ -610,6 +673,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
+    // Authorize & log server-side
+    OwnerSecurityService.authorizeOwnerAction('pro_granted', {
+      targetUserId: userId,
+      targetUserName: targetUser?.name,
+      durationDays,
+      source,
+      customExpiryDate,
+      details: `Granted Pro access (${durationDays ? `${durationDays} days` : customExpiryDate ? `Until ${customExpiryDate}` : 'Lifetime'})`,
+    });
+
     AuditLogService.record({
       actorId: currentUser.id,
       actorName: currentUser.name,
@@ -640,6 +713,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return u;
       })
     );
+
+    // Authorize & log server-side
+    OwnerSecurityService.authorizeOwnerAction('pro_revoked', {
+      targetUserId: userId,
+      targetUserName: targetUser?.name,
+      details: 'Revoked Pro access',
+    });
 
     AuditLogService.record({
       actorId: currentUser.id,
@@ -674,6 +754,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentBalance: targetUser.aiCredits,
     });
 
+    // Authorize & log server-side
+    OwnerSecurityService.authorizeOwnerAction('credits_adjusted', {
+      targetUserId: userId,
+      targetUserName: targetUser.name,
+      deltaCredits,
+      reason,
+      details: `${deltaCredits >= 0 ? '+' : ''}${deltaCredits} credits (${reason || 'Owner grant'})`,
+    });
+
     AuditLogService.record({
       actorId: currentUser.id,
       actorName: currentUser.name,
@@ -698,6 +787,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const ownerToggleToolPermission = (userId: string, toolId: string) => {
     if (!isOwner) return;
+    const targetUser = users.find(u => u.id === userId);
+
     setUsers(prev =>
       prev.map(u => {
         if (u.id === userId) {
@@ -713,6 +804,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return u;
       })
     );
+
+    OwnerSecurityService.authorizeOwnerAction('tool_permission', {
+      targetUserId: userId,
+      targetUserName: targetUser?.name,
+      toolId,
+    });
   };
 
   const ownerSetFeatureOverride = (userId: string, key: EntitlementKey, allowed: boolean | undefined) => {
@@ -737,6 +834,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
+    OwnerSecurityService.authorizeOwnerAction('feature_override', {
+      targetUserId: userId,
+      targetUserName: targetUser?.name,
+      key,
+      allowed,
+    });
+
     AuditLogService.record({
       actorId: currentUser.id,
       actorName: currentUser.name,
@@ -750,9 +854,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const ownerToggleBetaAccess = (userId: string) => {
     if (!isOwner) return;
+    const targetUser = users.find(u => u.id === userId);
+
     setUsers(prev =>
       prev.map(u => (u.id === userId ? { ...u, betaAccess: !u.betaAccess } : u))
     );
+
+    OwnerSecurityService.authorizeOwnerAction('beta_access', {
+      targetUserId: userId,
+      targetUserName: targetUser?.name,
+    });
   };
 
   const ownerUpdateRole = (userId: string, role: UserRole) => {
@@ -762,6 +873,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsers(prev =>
       prev.map(u => (u.id === userId ? { ...u, role } : u))
     );
+
+    OwnerSecurityService.authorizeOwnerAction('role_updated', {
+      targetUserId: userId,
+      targetUserName: targetUser?.name,
+      role,
+    });
 
     AuditLogService.record({
       actorId: currentUser.id,
@@ -781,6 +898,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsers(prev =>
       prev.map(u => (u.id === userId ? { ...u, status } : u))
     );
+
+    OwnerSecurityService.authorizeOwnerAction('status_updated', {
+      targetUserId: userId,
+      targetUserName: targetUser?.name,
+      status,
+    });
 
     AuditLogService.record({
       actorId: currentUser.id,

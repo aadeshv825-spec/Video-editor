@@ -98,7 +98,15 @@ export interface ProjectVersion {
   previewUrl?: string;
 }
 
-export type SyncStatus = 'synced' | 'syncing' | 'pending' | 'offline' | 'conflict' | 'failed';
+export type SyncStatus =
+  | 'synced'
+  | 'syncing'
+  | 'pending'
+  | 'offline'
+  | 'conflict'
+  | 'failed'
+  | 'local_only'
+  | 'cloud_unavailable';
 
 export interface ProjectConflict {
   projectId: string;
@@ -108,6 +116,52 @@ export interface ProjectConflict {
   cloudVersion: number;
   cloudUpdatedAt: string;
   deviceOrigin: string;
+  suggestedAction?: 'keep_local' | 'keep_remote' | 'create_copy';
+}
+
+export interface SyncPushPayload {
+  projectId: string;
+  ownerId: string;
+  baseVersion: number;
+  updatedAt: string;
+  deviceId: string;
+  revisionId: string;
+  projectData: Partial<Project>;
+}
+
+export interface SyncPushResult {
+  success: boolean;
+  status: SyncStatus;
+  projectVersion?: number;
+  revisionId?: string;
+  cloudSyncedAt?: string;
+  conflict?: ProjectConflict;
+  message?: string;
+}
+
+export interface SyncPullResult {
+  success: boolean;
+  projects: Project[];
+  serverTimestamp: string;
+  cloudDatabaseStatus: 'READY' | 'SETUP_REQUIRED';
+}
+
+export interface MediaUploadTokenRequest {
+  projectId?: string;
+  fileName: string;
+  fileSizeBytes: number;
+  mimeType: string;
+}
+
+export interface MediaUploadTokenResponse {
+  success: boolean;
+  assetId: string;
+  uploadUrl: string;
+  storageProvider: 'gcs' | 's3' | 'local';
+  isDirectCloudUpload: boolean;
+  setupRequired?: boolean;
+  maxChunkSizeBytes: number;
+  expiresAt: string;
 }
 
 export interface Project {
@@ -186,10 +240,63 @@ export interface PricingConfiguration {
 
 export type PaymentGateway = 'not_configured' | 'razorpay' | 'stripe' | 'google_play' | 'app_store';
 
+export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'expired';
+
+export interface UserSubscription {
+  id: string;
+  userId: string;
+  planId: ProPlanId;
+  status: SubscriptionStatus;
+  startDate: string; // ISO string
+  expiryDate: string; // ISO string
+  isTrial: boolean;
+  trialEndsAt?: string;
+  gateway: PaymentGateway;
+  gatewayCustomerId?: string;
+  gatewayOrderId?: string;
+  gatewaySubscriptionId?: string;
+  gatewayPaymentId?: string;
+  amount: number;
+  currency: string;
+  autoRenew: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentOrderCreationResult {
+  success: boolean;
+  orderId?: string;
+  gateway?: PaymentGateway;
+  amount?: number;
+  currency?: string;
+  keyId?: string;
+  setupRequired?: boolean;
+  message: string;
+}
+
+export interface PaymentVerificationPayload {
+  userId: string;
+  planId: ProPlanId;
+  gateway: PaymentGateway;
+  orderId?: string;
+  paymentId?: string;
+  signature?: string;
+}
+
+export interface PaymentVerificationResult {
+  success: boolean;
+  subscription?: UserSubscription;
+  proGranted: boolean;
+  message: string;
+  error?: string;
+}
+
 export interface PaymentInitResult {
   supported: boolean;
   gateway: PaymentGateway;
   message: string;
+  setupRequired?: boolean;
+  orderDetails?: PaymentOrderCreationResult;
 }
 
 export interface BackupSettings {

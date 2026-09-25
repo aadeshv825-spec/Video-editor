@@ -5,6 +5,7 @@ import {
   ModelRealAvailabilityState,
   ModelAvailabilityCheckResult,
 } from './providerStatusService';
+import { CapabilityFallbackService } from './capabilityFallbackService';
 
 export interface ExtendedAIModel extends ModelHubItem {
   providerType: 'gemini' | 'local' | 'runway' | 'elevenlabs' | 'flux' | 'openai' | 'stability' | 'suno';
@@ -412,11 +413,19 @@ export class ModelRegistryService {
       return { configured: true, message: 'Provider ready for generation.' };
     }
 
-    const fallback = this.getSuggestedFallbackModel(modelId);
+    const fallbackRes = CapabilityFallbackService.resolveFallback(modelId);
+    if (!fallbackRes.canFallback || fallbackRes.accuracy === 'NO_EQUIVALENT') {
+      return {
+        configured: false,
+        message: fallbackRes.userMessage || 'Compatible provider setup required for this operation.',
+        suggestedAlternativeId: undefined,
+      };
+    }
+
     return {
       configured: false,
-      message: 'Provider setup required. Please try another available model.',
-      suggestedAlternativeId: fallback?.id,
+      message: fallbackRes.userMessage,
+      suggestedAlternativeId: fallbackRes.targetModelId,
     };
   }
 
@@ -442,25 +451,10 @@ export class ModelRegistryService {
   }
 
   static getSuggestedFallbackModel(modelId: string): ExtendedAIModel | undefined {
-    const target = this.getModelById(modelId);
-    if (!target) return undefined;
-
-    // Find configured and available model in the same category
-    const candidates = AI_MODEL_REGISTRY.filter(
-      m =>
-        m.id !== modelId &&
-        m.category === target.category &&
-        m.availability === 'online' &&
-        (m.providerType === 'gemini' || m.providerType === 'local' || ProviderStatusService.isProviderConfigured(m.providerType))
-    );
-
-    if (candidates.length > 0) {
-      // Prefer recommended
-      const rec = candidates.find(c => c.badges.includes('Recommended'));
-      return rec || candidates[0];
+    const resolution = CapabilityFallbackService.resolveFallback(modelId);
+    if (resolution.canFallback && resolution.targetModelId && resolution.accuracy !== 'NO_EQUIVALENT') {
+      return this.getModelById(resolution.targetModelId);
     }
-
-    // Fallback across category to any reliable engine
-    return AI_MODEL_REGISTRY.find(m => m.id === 'veo-3.1-lite-generate-preview' || m.id === 'gemini-3.1-flash-image');
+    return undefined;
   }
 }

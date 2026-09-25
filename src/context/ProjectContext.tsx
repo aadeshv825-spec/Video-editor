@@ -3,6 +3,7 @@ import { INITIAL_PROJECTS } from '../data/initialData';
 import { SyncEngine } from '../services/sync/syncEngine';
 import { ErrorMonitoringService } from '../services/recovery/errorMonitoringService';
 import { EditAction, MediaAsset, Project, ProjectConflict, ProjectVersion, StudioType, SyncStatus } from '../types';
+import { useAuth } from './AuthContext';
 
 interface ProjectContextType {
   projects: Project[];
@@ -96,10 +97,12 @@ function sanitizeProjectSchema(proj: any): Project {
     historyIndex: typeof proj.historyIndex === 'number' ? proj.historyIndex : -1,
     hasRecoverySnapshot: !!proj.hasRecoverySnapshot,
     stateData: proj.stateData && typeof proj.stateData === 'object' ? proj.stateData : {},
+    ownerId: typeof proj.ownerId === 'string' ? proj.ownerId : undefined,
   };
 }
 
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useAuth();
   const [projects, setProjects] = useState<Project[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_PROJECTS_KEY);
@@ -140,9 +143,18 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [isAutosaving, setIsAutosaving] = useState(false);
   const [lastAutosavedTime, setLastAutosavedTime] = useState<string | null>(null);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() => SyncEngine.getStatus());
   const [syncConflict, setSyncConflict] = useState<ProjectConflict | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  // Subscribe to SyncEngine status changes
+  useEffect(() => {
+    SyncEngine.init();
+    const unsubscribe = SyncEngine.subscribe(status => {
+      setSyncStatus(status);
+    });
+    return unsubscribe;
+  }, []);
 
   // Unsaved changes browser prompt & active session crash marker
   useEffect(() => {
@@ -277,6 +289,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const now = new Date().toISOString();
     const newProj: Project = {
       id: `proj-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      ownerId: currentUser.id,
       title: title.trim() || 'Untitled Project',
       type,
       createdAt: now,
@@ -319,6 +332,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const deleteProject = (id: string) => {
+    const target = projects.find(p => p.id === id);
+    if (target?.ownerId && target.ownerId !== currentUser.id && currentUser.role !== 'owner') {
+      return; // Protected: only project owner or studio admin/owner can delete
+    }
+
     setProjects(prev => prev.filter(p => p.id !== id));
     if (activeProjectId === id) {
       setActiveProjectId(null);
@@ -332,6 +350,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const duplicated: Project = {
       ...target,
       id: `proj-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      ownerId: currentUser.id,
       title: `${target.title} (Copy)`,
       createdAt: now,
       updatedAt: now,
@@ -530,6 +549,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Media assets
   const addMediaToProject = (asset: Omit<MediaAsset, 'id' | 'createdAt'>) => {
     if (!activeProjectId) return;
+    const target = projects.find(p => p.id === activeProjectId);
+    if (target?.ownerId && target.ownerId !== currentUser.id && currentUser.role !== 'owner') {
+      console.warn('Unauthorized attempt to modify media in another user\'s project');
+      return;
+    }
+
     const newMedia: MediaAsset = {
       ...asset,
       id: `med-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
@@ -554,6 +579,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const removeMediaFromProject = (assetId: string) => {
     if (!activeProjectId) return;
+    const target = projects.find(p => p.id === activeProjectId);
+    if (target?.ownerId && target.ownerId !== currentUser.id && currentUser.role !== 'owner') {
+      console.warn('Unauthorized attempt to delete media from another user\'s project');
+      return;
+    }
+
     setProjects(prev =>
       prev.map(p => {
         if (p.id === activeProjectId) {
@@ -651,15 +682,20 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       await ErrorMonitoringService.executeWithRecovery(
         async () => {
-          const res = await SyncEngine.syncProject(target);
+          const res = await SyncEngine.syncProject(target, currentUser?.id);
           setSyncStatus(res.status);
           if (res.conflict) {
             setSyncConflict(res.conflict);
-          } else if (res.status === 'synced') {
+          } else {
             setProjects(prev =>
               prev.map(p =>
                 p.id === target.id
-                  ? { ...p, cloudSyncedAt: new Date().toISOString(), syncStatus: 'synced' }
+                  ? {
+                      ...p,
+                      cloudSyncedAt: new Date().toISOString(),
+                      syncStatus: res.status,
+                      cloudVersion: res.projectVersion || p.cloudVersion || 1,
+                    }
                   : p
               )
             );
@@ -670,8 +706,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           moduleName: 'SyncEngine',
           maxRetries: 2,
           fallback: async () => {
-            // Local fallback maintains data safely without cloud duplication
-            setSyncStatus('synced');
+            // Local fallback maintains data safely without false cloud claim
+            const fallbackStatus: SyncStatus = isOnline ? 'local_only' : 'offline';
+            setSyncStatus(fallbackStatus);
             ErrorMonitoringService.reportError({
               category: 'sync',
               message: `Sync deferred for "${target.title}". Local state securely maintained.`,
@@ -696,14 +733,19 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     syncProjectNow(projectId);
   };
 
-  const resolveConflict = (action: 'keep_local' | 'keep_remote' | 'create_copy') => {
+  const resolveConflict = async (action: 'keep_local' | 'keep_remote' | 'create_copy') => {
     if (!syncConflict) return;
+
+    const target = projects.find(p => p.id === syncConflict.projectId);
+    if (target) {
+      await SyncEngine.resolveConflictOnServer(syncConflict.projectId, action, target, currentUser?.id);
+    }
 
     if (action === 'keep_local') {
       setProjects(prev =>
         prev.map(p =>
           p.id === syncConflict.projectId
-            ? { ...p, cloudVersion: syncConflict.cloudVersion + 1, syncStatus: 'synced', cloudSyncedAt: new Date().toISOString() }
+            ? { ...p, cloudVersion: syncConflict.cloudVersion + 1, syncStatus: SyncEngine.getStatus(), cloudSyncedAt: new Date().toISOString() }
             : p
         )
       );
@@ -711,12 +753,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setProjects(prev =>
         prev.map(p =>
           p.id === syncConflict.projectId
-            ? { ...p, cloudVersion: syncConflict.cloudVersion, updatedAt: syncConflict.cloudUpdatedAt, syncStatus: 'synced' }
+            ? { ...p, cloudVersion: syncConflict.cloudVersion, updatedAt: syncConflict.cloudUpdatedAt, syncStatus: SyncEngine.getStatus() }
             : p
         )
       );
     } else if (action === 'create_copy') {
-      const target = projects.find(p => p.id === syncConflict.projectId);
       if (target) {
         duplicateProject(target.id);
       }
@@ -724,7 +765,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     SyncEngine.clearConflict();
     setSyncConflict(null);
-    setSyncStatus('synced');
+    setSyncStatus(SyncEngine.getStatus());
   };
 
   return (

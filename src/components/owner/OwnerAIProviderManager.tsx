@@ -16,12 +16,18 @@ import {
   Check,
   ChevronRight,
   Info,
+  DollarSign,
+  BarChart3,
+  ShieldAlert,
 } from 'lucide-react';
 import { ProviderStatusService, ProviderConnectionInfo } from '../../services/ai/providerStatusService';
 import { useAuth } from '../../context/AuthContext';
+import { OwnerCostSafetyControls } from './OwnerCostSafetyControls';
+import { OwnerProviderCostDashboard } from './OwnerProviderCostDashboard';
 
 export const OwnerAIProviderManager: React.FC = () => {
   const { isOwner } = useAuth();
+  const [activeTab, setActiveTab] = useState<'providers' | 'safety' | 'economics'>('providers');
   const [providers, setProviders] = useState<ProviderConnectionInfo[]>(() => ProviderStatusService.getProviders());
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -154,31 +160,75 @@ export const OwnerAIProviderManager: React.FC = () => {
         </button>
       </div>
 
-      {/* Two-Tier Credit Architecture Notice */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/30 space-y-1.5 text-xs">
-          <div className="flex items-center gap-1.5 font-semibold text-neutral-900 dark:text-neutral-100">
-            <Coins className="w-4 h-4 text-amber-500" />
-            <span>VYRO User Credits Layer</span>
-          </div>
-          <p className="text-neutral-600 dark:text-neutral-400 text-[11px] leading-relaxed">
-            In-app studio entitlement quota for end users. Credits are deducted per generation task according to user tier (Free vs Pro). Normal users never interact with external provider billing.
-          </p>
-        </div>
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-1 border-b border-neutral-200 dark:border-neutral-800 pb-px">
+        <button
+          onClick={() => setActiveTab('providers')}
+          className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-1.5 cursor-pointer border-b-2 ${
+            activeTab === 'providers'
+              ? 'border-purple-600 text-purple-600 dark:text-purple-400 bg-purple-500/5'
+              : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
+          }`}
+        >
+          <Server className="w-3.5 h-3.5" />
+          <span>Providers & Credentials</span>
+        </button>
 
-        <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/30 space-y-1.5 text-xs">
-          <div className="flex items-center gap-1.5 font-semibold text-neutral-900 dark:text-neutral-100">
-            <CreditCard className="w-4 h-4 text-purple-500" />
-            <span>Owner / Provider API Billing Layer</span>
-          </div>
-          <p className="text-neutral-600 dark:text-neutral-400 text-[11px] leading-relaxed">
-            Direct API usage billed directly by Google, Runway, OpenAI, ElevenLabs, etc. Stored exclusively inside server-side environment variables or server vault. Secrets are never exposed to clients.
-          </p>
-        </div>
+        <button
+          onClick={() => setActiveTab('safety')}
+          className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-1.5 cursor-pointer border-b-2 ${
+            activeTab === 'safety'
+              ? 'border-purple-600 text-purple-600 dark:text-purple-400 bg-purple-500/5'
+              : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
+          }`}
+        >
+          <ShieldAlert className="w-3.5 h-3.5" />
+          <span>Cost Safety & Master Switches</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('economics')}
+          className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors flex items-center gap-1.5 cursor-pointer border-b-2 ${
+            activeTab === 'economics'
+              ? 'border-purple-600 text-purple-600 dark:text-purple-400 bg-purple-500/5'
+              : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
+          }`}
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          <span>Economics & Ledger</span>
+        </button>
       </div>
 
-      {/* Providers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {activeTab === 'safety' && <OwnerCostSafetyControls />}
+      {activeTab === 'economics' && <OwnerProviderCostDashboard />}
+
+      {activeTab === 'providers' && (
+        <>
+          {/* Two-Tier Credit Architecture Notice */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/30 space-y-1.5 text-xs">
+              <div className="flex items-center gap-1.5 font-semibold text-neutral-900 dark:text-neutral-100">
+                <Coins className="w-4 h-4 text-amber-500" />
+                <span>VYRO User Credits Layer</span>
+              </div>
+              <p className="text-neutral-600 dark:text-neutral-400 text-[11px] leading-relaxed">
+                In-app studio entitlement quota for end users. Credits are deducted per generation task according to user tier (Free vs Pro). Normal users never interact with external provider billing.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/30 space-y-1.5 text-xs">
+              <div className="flex items-center gap-1.5 font-semibold text-neutral-900 dark:text-neutral-100">
+                <CreditCard className="w-4 h-4 text-purple-500" />
+                <span>Owner / Provider API Billing Layer</span>
+              </div>
+              <p className="text-neutral-600 dark:text-neutral-400 text-[11px] leading-relaxed">
+                Direct API usage billed directly by Google, Runway, OpenAI, ElevenLabs, etc. Stored exclusively inside server-side environment variables or server vault. Secrets are never exposed to clients.
+              </p>
+            </div>
+          </div>
+
+          {/* Providers Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {providers.map(provider => {
           const isTesting = testingId === provider.id;
           const testRes = testResults[provider.id];
@@ -327,6 +377,8 @@ export const OwnerAIProviderManager: React.FC = () => {
           );
         })}
       </div>
+      </>
+      )}
 
       {/* Owner Configure Key Drawer/Modal */}
       {configuringProvider && (

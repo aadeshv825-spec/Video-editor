@@ -1,4 +1,5 @@
 import { PricingConfiguration, ProPlanItem } from '../../types';
+import { OwnerSecurityService } from './ownerSecurityService';
 
 const PRICING_STORAGE_KEY = 'ai_creative_studio_pricing_v1';
 
@@ -82,7 +83,14 @@ export class PricingConfigService {
         updatedAt: new Date().toISOString(),
       };
       localStorage.setItem(PRICING_STORAGE_KEY, JSON.stringify(updated));
-      window.dispatchEvent(new CustomEvent('pricing-config-updated', { detail: updated }));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('pricing-config-updated', { detail: updated }));
+      }
+      // Authorize and log server-side
+      OwnerSecurityService.authorizeOwnerAction('pricing_changed', {
+        details: `Updated plan pricing matrix on active platform currency (${config.currency})`,
+        pricingConfig: updated,
+      });
     } catch (e) {
       console.warn('Failed to persist pricing configuration', e);
     }
@@ -114,7 +122,9 @@ export class PricingConfigService {
   public static resetToDefaults(): PricingConfiguration {
     try {
       localStorage.setItem(PRICING_STORAGE_KEY, JSON.stringify(DEFAULT_PRICING_CONFIG));
-      window.dispatchEvent(new CustomEvent('pricing-config-updated', { detail: DEFAULT_PRICING_CONFIG }));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('pricing-config-updated', { detail: DEFAULT_PRICING_CONFIG }));
+      }
     } catch (e) {
       console.warn('Failed to reset pricing config', e);
     }

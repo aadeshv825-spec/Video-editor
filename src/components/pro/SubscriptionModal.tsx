@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { PricingConfigService } from '../../services/owner/pricingConfigService';
-import { PaymentService } from '../../services/payment/paymentService';
+import { PaymentService, PaymentProviderConfig } from '../../services/payment/paymentService';
 import { PricingConfiguration, ProPlanId, ProPlanItem } from '../../types';
 
 interface SubscriptionModalProps {
@@ -33,6 +33,10 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     PricingConfigService.getConfig()
   );
 
+  const [gatewayStatus, setGatewayStatus] = useState<PaymentProviderConfig>(() =>
+    PaymentService.getGatewayConfig()
+  );
+
   const [selectedPlanId, setSelectedPlanId] = useState<ProPlanId>('six_months');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -40,6 +44,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      PaymentService.fetchGatewayStatus().then(status => {
+        setGatewayStatus(status);
+      });
       const config = PricingConfigService.getConfig();
       setPricingConfig(config);
       const plansList = Object.values(config.plans);
@@ -55,7 +62,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
   const plansList = Object.values(pricingConfig.plans);
   const selectedPlan: ProPlanItem = pricingConfig.plans[selectedPlanId] || plansList[0];
-  const isPaymentConfigured = PaymentService.isConfigured();
+  const isPaymentConfigured = gatewayStatus.isConfigured;
 
   const handleSubscribe = async () => {
     setIsProcessing(true);
@@ -63,7 +70,8 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
     const result = await PaymentService.initiateSubscription(
       selectedPlan,
-      currentUser.email
+      currentUser.email,
+      currentUser.id
     );
 
     setIsProcessing(false);
@@ -72,7 +80,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
       setPaymentNotice({ text: result.message });
     } else {
       setPaymentNotice({
-        text: result.message || 'Payment gateway is not configured yet in this environment.',
+        text: result.message || 'Payment gateway setup is required for real transactions.',
         isError: true,
       });
     }
@@ -260,7 +268,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             </button>
             <span className="text-neutral-300 dark:text-neutral-700">•</span>
             <span className="text-[11px] text-neutral-400">
-              Gateway: {isPaymentConfigured ? 'Live Merchant Ready' : 'Development Gateway'}
+              Gateway: {isPaymentConfigured ? 'Live Merchant Ready' : 'SETUP_REQUIRED (Merchant Keys Pending)'}
             </span>
           </div>
 

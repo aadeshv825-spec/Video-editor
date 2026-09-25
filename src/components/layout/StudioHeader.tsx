@@ -17,7 +17,9 @@ import {
   AlertTriangle,
   Bell,
   HelpCircle,
-  Zap
+  Zap,
+  Database,
+  HardDrive
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useProjects } from '../../context/ProjectContext';
@@ -80,7 +82,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
       return (
         <button
           onClick={onOpenCloudStorage}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 text-[10px] font-mono hover:bg-neutral-300"
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 text-[10px] font-mono hover:bg-neutral-300 transition-colors"
           title="Offline mode: changes staged locally until connection is restored"
         >
           <CloudOff className="w-3 h-3 text-neutral-400" />
@@ -93,7 +95,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
       return (
         <div 
           className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-mono"
-          title="Syncing project to cloud vault"
+          title="Synchronizing project state with studio server"
         >
           <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
           <span className="hidden sm:inline">Syncing...</span>
@@ -105,20 +107,60 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
       return (
         <button
           onClick={onOpenCloudStorage}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[10px] font-mono font-bold hover:bg-amber-500/30"
-          title="Cloud sync conflict detected! Click to resolve"
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[10px] font-mono font-bold hover:bg-amber-500/30 transition-colors"
+          title="Cloud sync conflict detected between devices! Click to resolve non-destructively."
         >
           <AlertTriangle className="w-3 h-3 text-amber-500" />
-          <span>Conflict</span>
+          <span>Conflict Detected</span>
         </button>
       );
     }
 
+    if (syncStatus === 'local_only') {
+      return (
+        <button
+          onClick={onOpenCloudStorage}
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800/90 text-neutral-700 dark:text-neutral-300 text-[10px] font-mono hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-colors"
+          title="Local Workspace Active. Centralized multi-device cloud database is SETUP_REQUIRED."
+        >
+          <HardDrive className="w-3 h-3 text-neutral-500" />
+          <span className="hidden sm:inline">Local Only</span>
+        </button>
+      );
+    }
+
+    if (syncStatus === 'pending') {
+      return (
+        <button
+          onClick={() => syncProjectNow()}
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 text-[10px] font-mono hover:bg-yellow-500/20 transition-colors"
+          title="Pending synchronization. Click to trigger immediate sync."
+        >
+          <RefreshCw className="w-3 h-3 text-yellow-500" />
+          <span className="hidden sm:inline">Sync Pending</span>
+        </button>
+      );
+    }
+
+    if (syncStatus === 'cloud_unavailable' || syncStatus === 'failed') {
+      return (
+        <button
+          onClick={() => syncProjectNow()}
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-400 text-[10px] font-mono hover:bg-rose-500/20 transition-colors"
+          title="Cloud endpoint unreachable. Local workspace preserved safely."
+        >
+          <CloudOff className="w-3 h-3 text-rose-500" />
+          <span className="hidden sm:inline">Cloud Unavailable</span>
+        </button>
+      );
+    }
+
+    // Only shown when server explicitly verified and confirmed persistence
     return (
       <button
         onClick={() => syncProjectNow()}
         className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-mono hover:bg-emerald-500/20 transition-colors"
-        title="All project revisions synced to secure cloud vault. Click to force resync."
+        title="Authoritative server synchronization confirmed. Click to check for updates."
       >
         <Cloud className="w-3 h-3 text-emerald-500" />
         <span className="hidden sm:inline">Synced</span>

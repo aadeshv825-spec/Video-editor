@@ -348,12 +348,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {mode === 'forgot' && forgotStep === 'verify' && (
               <div className="space-y-3">
                 <div className="p-3 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-[11px] space-y-1 text-neutral-600 dark:text-neutral-300">
-                  <p>A verification code was dispatched for: <strong className="text-neutral-900 dark:text-white">{email}</strong></p>
-                  {dispatchedCode && (
-                    <div className="p-2 rounded bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 font-mono text-center font-bold tracking-widest text-sm">
-                      TEST CODE: {dispatchedCode}
-                    </div>
-                  )}
+                  <p>A secure 6-digit verification code has been dispatched to: <strong className="text-neutral-900 dark:text-white">{email}</strong></p>
+                  <p className="text-neutral-400">Please check your inbox or security notifications and enter the code below.</p>
                 </div>
 
                 <div>

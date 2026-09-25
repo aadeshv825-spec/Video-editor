@@ -42,6 +42,7 @@ import {
 } from '../../../types/aiGeneration';
 import { AI_MODEL_REGISTRY, ExtendedAIModel, ModelRegistryService } from '../../../services/ai/modelRegistry';
 import { GenerationEngine } from '../../../services/ai/generationEngine';
+import { CreditLedgerService } from '../../../services/credits/creditLedgerService';
 import { ConfirmCostModal } from './ConfirmCostModal';
 import { GenerationPreviewModal } from './GenerationPreviewModal';
 import { ModelFallbackModal } from './ModelFallbackModal';
@@ -67,7 +68,7 @@ export const AIGenerationStudio: React.FC<AIGenerationStudioProps> = ({
   onOpenSettings,
   onNavigateToStudio,
 }) => {
-  const { currentUser, isPro, canAccessTool } = useAuth();
+  const { currentUser, isPro, isOwner, canAccessTool, deductCredits } = useAuth();
   const { activeProject, addMediaToProject } = useProjects();
   const { createJob, updateJobStatus } = useAIJobs();
   const { addNotification } = useNotifications();
@@ -226,6 +227,7 @@ export const AIGenerationStudio: React.FC<AIGenerationStudioProps> = ({
     updateJobStatus(job.id, 'EXECUTING', { progressPercent: 15 });
 
     const result = await GenerationEngine.executeGeneration({
+      jobId: job.id,
       taskType: currentTaskType,
       prompt,
       modelId: activeModel.id,
@@ -262,6 +264,9 @@ export const AIGenerationStudio: React.FC<AIGenerationStudioProps> = ({
       },
       projectId: activeProject?.id,
       projectTitle: activeProject?.title,
+      userId: currentUser?.id,
+      userCreditBalance: currentUser?.aiCredits,
+      isOwner,
       onProgress: (p, s) => {
         setGenerationProgress(p);
         setGenerationStatusText(s);
@@ -1097,7 +1102,7 @@ export const AIGenerationStudio: React.FC<AIGenerationStudioProps> = ({
         onConfirm={handleConfirmExecute}
         model={activeModel}
         estimatedCredits={activeModel.costPerUnit}
-        userCredits={currentUser.aiCredits}
+        userCredits={CreditLedgerService.getAvailableBalanceForUser(currentUser.id, currentUser.aiCredits)}
         taskTitle={prompt.length > 30 ? `${prompt.substring(0, 30)}...` : prompt}
         isProUser={isPro}
       />

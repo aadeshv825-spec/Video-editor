@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { AIJob, AIJobStatus, StructuredEditPlan } from '../types/aiDirector';
 import { ErrorMonitoringService } from '../services/recovery/errorMonitoringService';
+import { CreditLedgerService } from '../services/credits/creditLedgerService';
 
 interface AIJobContextType {
   jobs: AIJob[];
@@ -64,6 +65,11 @@ export const AIJobProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               affectedModule: 'AIJobWorker',
               recoveryResult: 'action_required',
               recoveryActionTaken: 'Flagged timeout safely. Preserved original media and timeline.',
+            });
+
+            CreditLedgerService.releaseReservation({
+              jobId: job.id,
+              reason: 'Operation timed out after 65s (safeguard)',
             });
 
             return {
@@ -149,6 +155,13 @@ export const AIJobProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               });
             }
 
+            if (status === 'FAILED' || status === 'CANCELLED') {
+              CreditLedgerService.releaseReservation({
+                jobId,
+                reason: patch?.errorInformation || `Job marked as ${status}`,
+              });
+            }
+
             return {
               ...j,
               status,
@@ -169,6 +182,12 @@ export const AIJobProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const retryJobWithFallback = async (jobId: string, fallbackModelId?: string): Promise<boolean> => {
     const targetJob = jobs.find(j => j.id === jobId);
     if (!targetJob) return false;
+
+    // Release any lingering reservation from previous attempt to prevent duplicate reservation
+    CreditLedgerService.releaseReservation({
+      jobId,
+      reason: 'Released for retry with compatible fallback engine',
+    });
 
     const chosenModelId = fallbackModelId || (targetJob.modelId === 'gemini-3.1-pro-preview' ? 'gemini-3.8-flash' : 'gemini-3.8-flash');
     const chosenModelName = chosenModelId.includes('flash') ? 'Gemini 3.8 Flash' : 'Gemini 3.1 Pro';
